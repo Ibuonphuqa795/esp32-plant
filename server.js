@@ -234,12 +234,16 @@ app.post("/api/config", requireAuth, (req, res) => {
   res.json({ ok: true, config });
 });
 
-// ---- Xuất CSV ----
+// ---- Xuất CSV (thời gian theo giờ Việt Nam) ----
+function toVNTime(iso) {
+  // Định dạng "YYYY-MM-DD HH:mm:ss" theo múi giờ Asia/Ho_Chi_Minh (UTC+7)
+  return new Date(iso).toLocaleString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" });
+}
 app.get("/api/export.csv", requireAuth, (req, res) => {
-  const rows = ["time,temp,moisture", ...history.map(h => `${h.time},${h.temp},${h.moisture}`)];
+  const rows = ["time (GMT+7),temp,moisture", ...history.map(h => `${toVNTime(h.time)},${h.temp},${h.moisture}`)];
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="sporo-data-${Date.now()}.csv"`);
-  res.send(rows.join("\n"));
+  res.send("﻿" + rows.join("\n")); // BOM để Excel đọc đúng tiếng Việt
 });
 
 // ---- Thời tiết ngoài trời (Open-Meteo, miễn phí, không cần key) ----
