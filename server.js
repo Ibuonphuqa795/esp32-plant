@@ -34,7 +34,7 @@ const SEED = [
   { user: "hung",  pass: "hung123",   name: "Thái Hưng" },
   { user: "quan",  pass: "quan123",   name: "Hoàng Quân" },
   { user: "tai",   pass: "tai123",    name: "Thành Tài" },
-  { user: "admin", pass: "sporo2026", name: "Admin" }
+  { user: "admin", pass: "admin123",  name: "Admin" }
 ];
 const USE_DB = !!process.env.DATABASE_URL;
 let pool = null;
@@ -53,7 +53,8 @@ async function initAuth() {
     )`);
     for (const s of SEED) {
       await pool.query(
-        `INSERT INTO users(username,name,pass_hash) VALUES($1,$2,$3) ON CONFLICT (username) DO NOTHING`,
+        `INSERT INTO users(username,name,pass_hash) VALUES($1,$2,$3)
+         ON CONFLICT (username) DO UPDATE SET pass_hash = EXCLUDED.pass_hash, name = EXCLUDED.name`,
         [s.user, s.name, bcrypt.hashSync(s.pass, 10)]
       );
     }
