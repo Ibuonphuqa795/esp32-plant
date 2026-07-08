@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ESP32 - Giám sát cây trồng</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .wrap { max-width: 860px; margin: 0 auto; }
+    h1 { font-size: 24px; margin-bottom: 4px; }
+    .sub { color: #94a3b8; font-size: 14px; margin-bottom: 24px; }
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .card {
+      background: #1e293b; border-radius: 16px; padding: 24px;
+      border: 1px solid #334155;
+    }
+    .card .label { font-size: 14px; color: #94a3b8; margin-bottom: 8px; }
+    .card .value { font-size: 44px; font-weight: 700; }
+    .card .unit { font-size: 20px; color: #94a3b8; font-weight: 400; }
+    .temp .value { color: #fb923c; }
+    .moist .value { color: #38bdf8; }
+    .chart-box { background: #1e293b; border-radius: 16px; padding: 24px; border: 1px solid #334155; }
+    .status { font-size: 13px; color: #64748b; margin-top: 16px; text-align: center; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; margin-right: 6px; }
+    .dot.off { background: #ef4444; }
+    @media (max-width: 560px) { .cards { grid-template-columns: 1fr; } .card .value { font-size: 36px; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🌱 Giám sát cây trồng</h1>
+    <div class="sub">Dữ liệu thời gian thực từ ESP32</div>
+
+    <div class="cards">
+      <div class="card temp">
+        <div class="label">Nhiệt độ</div>
+        <div class="value"><span id="temp">--</span><span class="unit"> °C</span></div>
+      </div>
+      <div class="card moist">
+        <div class="label">Độ ẩm đất</div>
+        <div class="value"><span id="moisture">--</span><span class="unit"> %</span></div>
+      </div>
+    </div>
+
+    <div class="chart-box">
+      <canvas id="chart" height="120"></canvas>
+    </div>
+
+    <div class="status">
+      <span id="dot" class="dot off"></span>
+      <span id="statusText">Đang chờ dữ liệu...</span>
+    </div>
+  </div>
+
+  <script>
+    const ctx = document.getElementById("chart");
+    const chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [
+          { label: "Nhiệt độ (°C)", data: [], borderColor: "#fb923c", backgroundColor: "rgba(251,146,60,.1)", tension: .3, yAxisID: "y" },
+          { label: "Độ ẩm (%)", data: [], borderColor: "#38bdf8", backgroundColor: "rgba(56,189,248,.1)", tension: .3, yAxisID: "y1" }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { labels: { color: "#e2e8f0" } } },
+        scales: {
+          x: { ticks: { color: "#64748b" }, grid: { color: "#334155" } },
+          y: { position: "left", ticks: { color: "#fb923c" }, grid: { color: "#334155" } },
+          y1: { position: "right", ticks: { color: "#38bdf8" }, grid: { drawOnChartArea: false } }
+        }
+      }
+    });
+
+    async function refresh() {
+      try {
+        const r = await fetch("/api/data");
+        const { latest, history } = await r.json();
+
+        if (latest && latest.temp !== null) {
+          document.getElementById("temp").textContent = latest.temp.toFixed(1);
+          document.getElementById("moisture").textContent = Math.round(latest.moisture);
+          const t = new Date(latest.time);
+          document.getElementById("statusText").textContent =
+            "Cập nhật lúc " + t.toLocaleTimeString("vi-VN");
+          document.getElementById("dot").classList.remove("off");
+        } else {
+          document.getElementById("statusText").textContent = "Chưa có dữ liệu từ ESP32";
+          document.getElementById("dot").classList.add("off");
+        }
+
+        chart.data.labels = history.map(h => new Date(h.time).toLocaleTimeString("vi-VN"));
+        chart.data.datasets[0].data = history.map(h => h.temp);
+        chart.data.datasets[1].data = history.map(h => h.moisture);
+        chart.update();
+      } catch (e) {
+        document.getElementById("statusText").textContent = "Mất kết nối tới server";
+        document.getElementById("dot").classList.add("off");
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 5000); // tự động cập nhật mỗi 5 giây
+  </script>
+</body>
+</html>
