@@ -56,8 +56,30 @@
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
     .icon-btn { min-width:40px; height:40px; padding:0 10px; border-radius:20px; cursor:pointer; border:1px solid var(--hair); background:var(--surface); color:var(--text); font-size:15px; font-weight:600; display:grid; place-items:center; transition:.18s; font-family:var(--font); }
     .icon-btn:hover { background:var(--surface2); } .icon-btn:active { transform:scale(.92); }
-    .avatar { width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg,var(--purple),var(--blue)); display:grid; place-items:center; color:#fff; font-weight:700; font-size:14px; }
+    .avatar { width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg,var(--purple),var(--blue)); display:grid; place-items:center; color:#fff; font-weight:700; font-size:14px; flex-shrink:0; }
+    .user-chip { display:flex; align-items:center; gap:8px; padding:4px 12px 4px 4px; background:var(--surface); border:1px solid var(--hair); border-radius:999px; font-size:13px; font-weight:600; }
     .content { padding:var(--s3); }
+    /* Alert banner */
+    .alert-banner { display:none; align-items:center; gap:12px; padding:14px 18px; border-radius:14px; margin-bottom:var(--s2); font-weight:600; font-size:14px; border:1px solid; }
+    .alert-banner.show { display:flex; animation:slideDown .3s ease; }
+    .alert-banner.danger { background:var(--red-t); color:var(--red); border-color:transparent; }
+    .alert-banner.warn { background:var(--orange-t); color:var(--orange); border-color:transparent; }
+    .alert-banner .bi { font-size:20px; animation:blink 1.2s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+    @keyframes slideDown { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:none} }
+    /* Weather */
+    .wx-main { display:flex; align-items:center; gap:18px; margin-bottom:16px; }
+    .wx-emoji { font-size:46px; }
+    .wx-temp { font-size:38px; font-weight:800; letter-spacing:-.02em; line-height:1; }
+    .wx-place { font-size:13px; color:var(--muted); margin-top:4px; }
+    .wx-cmp { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .wx-box { padding:12px 14px; border-radius:12px; background:var(--surface2); }
+    .wx-box .l { font-size:11px; color:var(--muted); } .wx-box .v { font-size:18px; font-weight:800; margin-top:2px; }
+    .wx-delta { font-size:12px; color:var(--muted); margin-top:10px; text-align:center; }
+    /* Daily stats grid */
+    .dstat { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .dstat .box { padding:14px; border-radius:12px; background:var(--surface2); }
+    .dstat .box .l { font-size:11.5px; color:var(--muted); } .dstat .box .v { font-size:20px; font-weight:800; margin-top:3px; letter-spacing:-.01em; }
     .cards { display:grid; grid-template-columns:repeat(6,1fr); gap:var(--s2); margin-bottom:var(--s2); }
     .stat { background:var(--surface); border:1px solid var(--hair); border-radius:var(--r); padding:18px; box-shadow:var(--shadow); transition:transform .22s, background .35s; }
     .stat:hover { transform:translateY(-3px); }
@@ -150,13 +172,16 @@
           <div class="search"><span>🔍</span><input data-i18n-ph="top.search" placeholder="Tìm kiếm…"></div>
           <div class="status-badge idle" id="statusBadge"><span class="dot"></span><span id="statusText" data-i18n="st.idle">CHỜ</span></div>
           <button class="icon-btn" id="langBtn" title="Ngôn ngữ">VI</button>
+          <button class="icon-btn" id="exportBtn" title="Xuất CSV">⬇</button>
           <button class="icon-btn" id="themeBtn" title="Sáng / Tối">🌙</button>
           <button class="icon-btn" id="gearBtn" title="Cài đặt">⚙️</button>
-          <div class="avatar">HK</div>
+          <div class="user-chip"><div class="avatar" id="avatar">?</div><span id="userName">—</span></div>
+          <button class="icon-btn" id="logoutBtn" title="Đăng xuất">⎋</button>
         </div>
       </div>
 
       <div class="content">
+        <div class="alert-banner" id="alertBanner"><span class="bi">⚠️</span><span id="alertText"></span></div>
         <div class="cards" id="cards">
           <div class="stat">
             <div class="top"><div class="label" data-i18n="card.temp">Nhiệt độ</div><div class="tile" style="background:var(--orange-t);color:var(--orange)">🌡️</div></div>
@@ -213,6 +238,32 @@
           <div class="panel">
             <div class="ph"><div><h3 data-i18n="p.waterHour">Số lần tưới theo giờ</h3><div class="desc" data-i18n="p.waterHourDesc">Tần suất kích hoạt van trong ngày</div></div><span class="chip" data-i18n="chip.times">lần</span></div>
             <canvas id="waterBar" height="140"></canvas>
+          </div>
+        </div>
+
+        <div class="grid-2b" id="extra">
+          <div class="panel">
+            <div class="ph"><div><h3 data-i18n="p.weather">Thời tiết ngoài trời</h3><div class="desc" data-i18n="p.weatherDesc">So sánh trong vườn ươm vs ngoài trời</div></div><span class="chip" id="wxPlace">Đà Lạt</span></div>
+            <div class="wx-main">
+              <div class="wx-emoji" id="wxEmoji">🌤️</div>
+              <div><div class="wx-temp"><span id="wxTemp">--</span>°C</div><div class="wx-place" id="wxPlaceSub" data-i18n="wx.outdoor">Nhiệt độ ngoài trời</div></div>
+            </div>
+            <div class="wx-cmp">
+              <div class="wx-box"><div class="l" data-i18n="wx.inTemp">Nhiệt độ trong vườn</div><div class="v"><span id="wxInTemp">--</span>°C</div></div>
+              <div class="wx-box"><div class="l" data-i18n="wx.outHum">Độ ẩm không khí ngoài</div><div class="v"><span id="wxHum">--</span>%</div></div>
+            </div>
+            <div class="wx-delta" id="wxDelta"></div>
+          </div>
+          <div class="panel">
+            <div class="ph"><div><h3 data-i18n="p.daily">Thống kê hôm nay</h3><div class="desc" data-i18n="p.dailyDesc">Tổng hợp từ dữ liệu ghi được trong ngày</div></div></div>
+            <div class="dstat">
+              <div class="box"><div class="l" data-i18n="d.tempMax">Nhiệt độ cao nhất</div><div class="v"><span id="dTempMax">--</span>°C</div></div>
+              <div class="box"><div class="l" data-i18n="d.tempMin">Nhiệt độ thấp nhất</div><div class="v"><span id="dTempMin">--</span>°C</div></div>
+              <div class="box"><div class="l" data-i18n="d.tempAvg">Nhiệt độ trung bình</div><div class="v"><span id="dTempAvg">--</span>°C</div></div>
+              <div class="box"><div class="l" data-i18n="d.moistAvg">Độ ẩm trung bình</div><div class="v"><span id="dMoistAvg">--</span>%</div></div>
+              <div class="box"><div class="l" data-i18n="d.waterTotal">Tổng lần tưới</div><div class="v" id="dWater">0</div></div>
+              <div class="box"><div class="l" data-i18n="d.samples">Số mẫu trong ngày</div><div class="v" id="dSamples">0</div></div>
+            </div>
           </div>
         </div>
 
@@ -289,7 +340,10 @@
         "seg.20":"20 điểm","seg.50":"50 điểm","seg.all":"Tất cả","dr.thresh":"Ngưỡng điều khiển",
         "f.on":"Bật tưới khi ẩm dưới","f.off":"Tắt tưới khi ẩm đạt","f.tmin":"Vùng nhiệt — cận dưới","f.tmax":"Vùng nhiệt — cận trên","f.dur":"Thời lượng tưới",
         "dr.save":"Lưu & áp dụng","dr.saving":"Đang lưu…","dr.saved":"✓ Đã lưu","dr.saveErr":"Lỗi — thử lại",
-        "tempDescTpl":"SHT31 — vùng thuận lợi {min}–{max}°C","moistDescTpl":"Capacitive — ON {on}% / OFF {off}%"
+        "tempDescTpl":"SHT31 — vùng thuận lợi {min}–{max}°C","moistDescTpl":"Capacitive — ON {on}% / OFF {off}%",
+        "p.weather":"Thời tiết ngoài trời","p.weatherDesc":"So sánh trong vườn ươm vs ngoài trời","wx.outdoor":"Nhiệt độ ngoài trời","wx.inTemp":"Nhiệt độ trong vườn","wx.outHum":"Độ ẩm không khí ngoài","wx.unavailable":"Chưa lấy được dữ liệu thời tiết","wx.deltaTpl":"Chênh {d}°C giữa trong vườn và ngoài trời",
+        "p.daily":"Thống kê hôm nay","p.dailyDesc":"Tổng hợp từ dữ liệu ghi được trong ngày","d.tempMax":"Nhiệt độ cao nhất","d.tempMin":"Nhiệt độ thấp nhất","d.tempAvg":"Nhiệt độ trung bình","d.moistAvg":"Độ ẩm trung bình","d.waterTotal":"Tổng lần tưới","d.samples":"Số mẫu trong ngày",
+        "alert.hotTpl":"⚠️ Nhiệt độ {t}°C — quá nóng, vượt ngưỡng an toàn cho cây giống!","alert.coldTpl":"⚠️ Nhiệt độ {t}°C — quá lạnh cho cây giống!","alert.dryTpl":"⚠️ Độ ẩm {m}% — đất quá khô, cần kiểm tra hệ thống tưới!","logout.confirm":"Đăng xuất khỏi SPORO?"
       },
       en: {
         "nav.monitor":"Monitoring","nav.overview":"Overview","nav.charts":"Sensor charts","nav.analytics":"Analytics","nav.log":"Event log",
@@ -312,7 +366,10 @@
         "seg.20":"20 points","seg.50":"50 points","seg.all":"All","dr.thresh":"Control thresholds",
         "f.on":"Start watering below","f.off":"Stop watering at","f.tmin":"Temp range — lower","f.tmax":"Temp range — upper","f.dur":"Watering duration",
         "dr.save":"Save & apply","dr.saving":"Saving…","dr.saved":"✓ Saved","dr.saveErr":"Error — retry",
-        "tempDescTpl":"SHT31 — favorable range {min}–{max}°C","moistDescTpl":"Capacitive — ON {on}% / OFF {off}%"
+        "tempDescTpl":"SHT31 — favorable range {min}–{max}°C","moistDescTpl":"Capacitive — ON {on}% / OFF {off}%",
+        "p.weather":"Outdoor weather","p.weatherDesc":"Compare nursery vs outdoor","wx.outdoor":"Outdoor temperature","wx.inTemp":"Nursery temperature","wx.outHum":"Outdoor air humidity","wx.unavailable":"Weather data unavailable","wx.deltaTpl":"{d}°C difference between nursery and outdoor",
+        "p.daily":"Today's statistics","p.dailyDesc":"Summary from data logged today","d.tempMax":"Highest temperature","d.tempMin":"Lowest temperature","d.tempAvg":"Average temperature","d.moistAvg":"Average moisture","d.waterTotal":"Total waterings","d.samples":"Samples today",
+        "alert.hotTpl":"⚠️ Temperature {t}°C — too hot, above safe range for seedlings!","alert.coldTpl":"⚠️ Temperature {t}°C — too cold for seedlings!","alert.dryTpl":"⚠️ Moisture {m}% — soil too dry, check the irrigation system!","logout.confirm":"Log out of SPORO?"
       }
     };
     let lang = localStorage.getItem("sporo-lang") || "vi";
@@ -471,13 +528,86 @@
         return `<tr><td>${fmtTime(e.time)}</td><td><span class="pill ${cls}">${label}</span></td><td>${e.detail}</td></tr>`;
       }).join("");
 
+      setUser(d.user);
+      updateAlert(d);
+      updateDaily(d);
+      updateWxCompare();
       renderCharts(d);
       syncDrawerFromConfig();
     }
 
     // ================= FETCH =================
     let timer=null;
-    async function refresh(){ try{ const r=await fetch("/api/data"); render(await r.json()); }catch(e){ document.getElementById("statusText").textContent=t("st.disconnected"); } }
+    async function refresh(){
+      try{
+        const r=await fetch("/api/data");
+        if(r.status===401){ location.href="/login.html"; return; }
+        render(await r.json());
+      }catch(e){ document.getElementById("statusText").textContent=t("st.disconnected"); }
+    }
+
+    // ===== AUTH: user + logout =====
+    function setUser(name){
+      document.getElementById("userName").textContent = name || "—";
+      const initials = (name||"?").split(" ").map(w=>w[0]).slice(-2).join("").toUpperCase();
+      document.getElementById("avatar").textContent = initials || "?";
+    }
+    document.getElementById("logoutBtn").onclick = async ()=>{
+      if(!confirm(t("logout.confirm"))) return;
+      try{ await fetch("/api/logout",{method:"POST"}); }catch(e){}
+      location.href="/login.html";
+    };
+    document.getElementById("exportBtn").onclick = ()=>{ window.location = "/api/export.csv"; };
+
+    // ===== WEATHER (ngoài trời, Open-Meteo) =====
+    const WX_EMOJI = c => c===0?"☀️":c<=3?"🌤️":c<=48?"🌫️":c<=67?"🌧️":c<=77?"❄️":c<=82?"🌦️":"⛈️";
+    async function loadWeather(){
+      try{
+        const r=await fetch("/api/weather");
+        if(!r.ok) throw 0;
+        const w=await r.json();
+        document.getElementById("wxTemp").textContent=Math.round(w.temp);
+        document.getElementById("wxHum").textContent=Math.round(w.humidity);
+        document.getElementById("wxEmoji").textContent=WX_EMOJI(w.code);
+        document.getElementById("wxPlace").textContent=w.place;
+        window._wxTemp = w.temp;
+        updateWxCompare();
+      }catch(e){
+        document.getElementById("wxDelta").textContent=t("wx.unavailable");
+      }
+    }
+    function updateWxCompare(){
+      const inT = lastData && lastData.latest && lastData.latest.temp;
+      document.getElementById("wxInTemp").textContent = (inT!=null)?inT.toFixed(1):"--";
+      if(inT!=null && window._wxTemp!=null){
+        const d=(inT-window._wxTemp).toFixed(1);
+        document.getElementById("wxDelta").textContent=t("wx.deltaTpl").replace("{d}",(d>=0?"+":"")+d);
+      }
+    }
+
+    // ===== ALERT BANNER =====
+    function updateAlert(d){
+      const b=document.getElementById("alertBanner"), txt=document.getElementById("alertText");
+      if(!d.latest||d.latest.temp==null){ b.className="alert-banner"; return; }
+      const tp=d.latest.temp, m=d.latest.moisture;
+      let msg=null, cls="warn";
+      if(tp>d.config.tempMax+5){ msg=t("alert.hotTpl").replace("{t}",tp.toFixed(1)); cls="danger"; }
+      else if(tp<d.config.tempMin-5){ msg=t("alert.coldTpl").replace("{t}",tp.toFixed(1)); cls="danger"; }
+      else if(m<d.config.moistureOn-10){ msg=t("alert.dryTpl").replace("{m}",Math.round(m)); cls="warn"; }
+      if(msg){ txt.textContent=msg.replace("⚠️ ",""); b.className="alert-banner show "+cls; }
+      else b.className="alert-banner";
+    }
+
+    // ===== DAILY STATS =====
+    function updateDaily(d){
+      const set=(id,v)=>document.getElementById(id).textContent=v;
+      if(d.daily){
+        set("dTempMax",d.daily.tempMax.toFixed(1)); set("dTempMin",d.daily.tempMin.toFixed(1));
+        set("dTempAvg",d.daily.tempAvg.toFixed(1)); set("dMoistAvg",Math.round(d.daily.moistAvg));
+        set("dSamples",d.daily.samples);
+      } else { ["dTempMax","dTempMin","dTempAvg","dMoistAvg"].forEach(i=>set(i,"--")); set("dSamples",0); }
+      set("dWater",d.stats.wateringToday);
+    }
     function startAuto(){ timer=setInterval(refresh,5000); } function stopAuto(){ clearInterval(timer); }
     document.getElementById("autoToggle").onchange=e=>{ e.target.checked?startAuto():stopAuto(); };
 
@@ -509,6 +639,7 @@
     // ================= INIT =================
     themeBtn.textContent=savedTheme==="dark"?"🌙":"☀️"; darkToggle.checked=savedTheme==="dark";
     buildCharts(); applyLang(); refresh(); startAuto();
+    loadWeather(); setInterval(loadWeather, 600000); // cập nhật thời tiết mỗi 10 phút
   </script>
 </body>
 </html>
