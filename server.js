@@ -77,6 +77,11 @@ async function createUser(username, name, pass) {
   if (USE_DB) await pool.query("INSERT INTO users(username,name,pass_hash) VALUES($1,$2,$3)", [username, name, hash]);
   else memUsers.push({ user: username, name, hash });
 }
+async function updatePassword(username, newPass) {
+  const hash = bcrypt.hashSync(newPass, 10);
+  if (USE_DB) await pool.query("UPDATE users SET pass_hash=$1 WHERE username=$2", [hash, username]);
+  else { const u = memUsers.find(x => x.user === username); if (u) u.hash = hash; }
+}
 
 const sessions = new Map(); // token -> { user, name }
 function currentUser(req) {
@@ -127,6 +132,22 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
+app.post("/api/change-password", requireAuth, async (req, res) => {
+  try {
+    const oldPass = (req.body || {}).oldPass || "";
+    const newPass = (req.body || {}).newPass || "";
+    const found = await findUser(req.user.user);
+    if (!found || !bcrypt.compareSync(oldPass, found.hash)) {
+      return res.status(400).json({ ok: false, error: "Mật khẩu hiện tại không đúng" });
+    }
+    if (String(newPass).length < 6) return res.status(400).json({ ok: false, error: "Mật khẩu mới tối thiểu 6 ký tự" });
+    await updatePassword(req.user.user, newPass);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: "Lỗi máy chủ" });
+  }
+});
+
 app.post("/api/logout", (req, res) => {
   const tok = req.cookies["sporo_session"];
   if (tok) sessions.delete(tok);
@@ -160,10 +181,11 @@ const MAX_HISTORY = 500;
 const events = [];
 const MAX_EVENTS = 50;
 let valveState = "OFF";
+let manualMode = null; // "ON" = giữ van mở thủ công (auto không được tắt); null = tự động
 let inZoneCount = 0, totalCount = 0;
 
-function addEvent(type, detail) {
-  events.unshift({ time: new Date().toISOString(), type, detail });
+function addEvent(type, detail, meta) {
+  events.unshift({ time: new Date().toISOString(), type, detail, meta: meta || null });
   if (events.length > MAX_EVENTS) events.pop();
 }
 
@@ -181,15 +203,20 @@ app.get("/api/update", (req, res) => {
   totalCount++;
   if (temp >= config.tempMin && temp <= config.tempMax) inZoneCount++;
 
-  if (valveState === "OFF" && moisture < config.moistureOn) {
-    valveState = "ON";
-    addEvent("Tưới", `Ẩm ${moisture}% < ${config.moistureOn}% → tưới ${config.waterDuration}s`);
-  } else if (valveState === "ON" && moisture >= config.moistureOff) {
-    valveState = "OFF";
-    addEvent("Tắt", `Ẩm đạt ${moisture}% ≥ ${config.moistureOff}% → tắt van`);
+  // Bỏ qua điều khiển tự động khi đang tưới THỦ CÔNG (giữ van mở tới khi bấm Dừng)
+  if (manualMode !== "ON") {
+    if (valveState === "OFF" && moisture < config.moistureOn) {
+      valveState = "ON";
+      addEvent("Tưới", `Ẩm ${moisture}% < ${config.moistureOn}% → tưới ${config.waterDuration}s`,
+        { kind: "water", moisture, on: config.moistureOn, dur: config.waterDuration });
+    } else if (valveState === "ON" && moisture >= config.moistureOff) {
+      valveState = "OFF";
+      addEvent("Tắt", `Ẩm đạt ${moisture}% ≥ ${config.moistureOff}% → tắt van`,
+        { kind: "stop", moisture, off: config.moistureOff });
+    }
   }
-  if (temp > config.tempMax + 5) addEvent("Cảnh báo", `Nhiệt độ cao ${temp}°C`);
-  else if (temp < config.tempMin - 5) addEvent("Cảnh báo", `Nhiệt độ thấp ${temp}°C`);
+  if (temp > config.tempMax + 5) addEvent("Cảnh báo", `Nhiệt độ cao ${temp}°C`, { kind: "hot", temp });
+  else if (temp < config.tempMin - 5) addEvent("Cảnh báo", `Nhiệt độ thấp ${temp}°C`, { kind: "cold", temp });
 
   res.json({ ok: true, received: latest, valve: valveState });
 });
@@ -230,8 +257,27 @@ app.post("/api/config", requireAuth, (req, res) => {
   if (tempMin != null) config.tempMin = Number(tempMin);
   if (tempMax != null) config.tempMax = Number(tempMax);
   if (waterDuration != null) config.waterDuration = Number(waterDuration);
-  addEvent("Cấu hình", `Cập nhật ngưỡng: tưới<${config.moistureOn}% / tắt≥${config.moistureOff}%`);
+  addEvent("Cấu hình", `Cập nhật ngưỡng: tưới<${config.moistureOn}% / tắt≥${config.moistureOff}%`,
+    { kind: "config", on: config.moistureOn, off: config.moistureOff });
   res.json({ ok: true, config });
+});
+
+// ---- Tưới THỦ CÔNG (bật/tắt van bất kỳ lúc nào, không qua ngưỡng) ----
+// ESP32 đọc trạng thái van trả về ở /api/update để điều khiển van thật.
+app.post("/api/valve", requireAuth, (req, res) => {
+  const action = String((req.body || {}).action || "").toLowerCase();
+  if (action === "on") {
+    valveState = "ON";
+    manualMode = "ON"; // giữ van mở tới khi bấm Dừng
+    addEvent("Tưới", "Tưới thủ công (bật van)", { kind: "manual_on", by: req.user.name });
+  } else if (action === "off") {
+    valveState = "OFF";
+    manualMode = null; // trả về chế độ tự động
+    addEvent("Tắt", "Tắt van thủ công", { kind: "manual_off", by: req.user.name });
+  } else {
+    return res.status(400).json({ ok: false, error: "action phải là on/off" });
+  }
+  res.json({ ok: true, valve: valveState, manualMode });
 });
 
 // ---- Xuất CSV (thời gian theo giờ Việt Nam) ----
@@ -240,25 +286,155 @@ function toVNTime(iso) {
   return new Date(iso).toLocaleString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" });
 }
 app.get("/api/export.csv", requireAuth, (req, res) => {
-  const rows = ["time (GMT+7),temp,moisture", ...history.map(h => `${toVNTime(h.time)},${h.temp},${h.moisture}`)];
+  // Ép cột thời gian thành TEXT bằng cú pháp ="..." để Excel/WPS hiển thị đầy đủ
+  // (tránh lỗi cột hiện "#####" do bị tự nhận là số/serial ngày tháng và co hẹp).
+  // Tách thêm cột ngày & giờ riêng cho dễ lọc/tính toán.
+  const rows = ["thời gian (GMT+7),ngày,giờ,nhiệt độ (°C),độ ẩm (%)"];
+  for (const h of history) {
+    const full = toVNTime(h.time);            // "2026-07-09 15:19:34"
+    const [d, tm] = full.split(" ");
+    rows.push(`="${full}",="${d}",="${tm}",${h.temp},${h.moisture}`);
+  }
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="sporo-data-${Date.now()}.csv"`);
-  res.send("﻿" + rows.join("\n")); // BOM để Excel đọc đúng tiếng Việt
+  res.send("﻿" + rows.join("\r\n")); // BOM + CRLF để Excel/WPS đọc đúng tiếng Việt
+});
+
+// ---- Tìm địa điểm theo tên (Open-Meteo Geocoding, miễn phí, không cần key) ----
+app.get("/api/geocode", requireAuth, async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    if (!q) return res.json({ results: [] });
+    const lang = req.query.lang === "en" ? "en" : "vi";
+    let results = [];
+
+    // Nguồn 1: Open-Meteo geocoding (nhanh, phủ thành phố lớn)
+    try {
+      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=${lang}&format=json`;
+      const r = await fetch(url);
+      const j = await r.json();
+      results = (j.results || []).map(x => ({
+        name: x.name, admin1: x.admin1 || "", country: x.country || "",
+        country_code: x.country_code || "", lat: x.latitude, lon: x.longitude
+      }));
+    } catch (e) { /* bỏ qua, dùng nguồn 2 */ }
+
+    // Nguồn 2 (bổ sung/dự phòng): Nominatim OpenStreetMap — phủ tốt hơn cho
+    // địa danh nhỏ ở Việt Nam (phường, thị trấn, tên có dấu…). Bắt buộc User-Agent.
+    if (results.length < 4) {
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=jsonv2&limit=8&accept-language=${lang}&addressdetails=1`;
+        const r = await fetch(url, { headers: { "User-Agent": "SPORO-greenhouse-dashboard/1.0" } });
+        const arr = await r.json();
+        const extra = (Array.isArray(arr) ? arr : []).map(x => {
+          const a = x.address || {};
+          const name = a.city || a.town || a.village || a.suburb || a.county || a.state
+                     || x.name || (x.display_name || "").split(",")[0].trim();
+          return {
+            name, admin1: a.state || a.county || "", country: a.country || "",
+            country_code: (a.country_code || "").toUpperCase(),
+            lat: Number(x.lat), lon: Number(x.lon)
+          };
+        }).filter(e => e.name && !Number.isNaN(e.lat) && !Number.isNaN(e.lon));
+        // gộp, loại trùng theo toạ độ gần nhau (~5km)
+        for (const e of extra) {
+          if (!results.some(r0 => Math.abs(r0.lat - e.lat) < 0.05 && Math.abs(r0.lon - e.lon) < 0.05)) {
+            results.push(e);
+          }
+        }
+      } catch (e) { /* bỏ qua */ }
+    }
+
+    // Ưu tiên kết quả ở Việt Nam lên đầu
+    results.sort((a, b) => (b.country_code === "VN") - (a.country_code === "VN"));
+    res.json({ results: results.slice(0, 8) });
+  } catch (e) {
+    res.status(502).json({ error: "geocode unavailable" });
+  }
+});
+
+// ---- Tìm tên nơi từ toạ độ (reverse geocode — BigDataCloud, miễn phí, không key) ----
+// Dùng cho nút "Vị trí của tôi" (lấy toạ độ từ Geolocation của trình duyệt).
+app.get("/api/revgeo", requireAuth, async (req, res) => {
+  try {
+    const lat = req.query.lat, lon = req.query.lon;
+    if (lat == null || lon == null) return res.status(400).json({ error: "missing lat/lon" });
+    const lg = req.query.lang === "en" ? "en" : "vi";
+    const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=${lg}`;
+    const r = await fetch(url);
+    const j = await r.json();
+    const name = j.city || j.locality || j.principalSubdivision || j.countryName || (lg === "en" ? "Current location" : "Vị trí hiện tại");
+    res.json({ name, admin: j.principalSubdivision || "", country: j.countryName || "", lat: Number(lat), lon: Number(lon) });
+  } catch (e) {
+    res.status(502).json({ error: "revgeo unavailable" });
+  }
 });
 
 // ---- Thời tiết ngoài trời (Open-Meteo, miễn phí, không cần key) ----
+// Trả về TOÀN BỘ dữ liệu trạm quan trắc có sẵn: nhiệt độ, cảm giác, độ ẩm,
+// mưa, xác suất mưa, mã thời tiết, gió (tốc độ/hướng/giật), max/min trong ngày.
 app.get("/api/weather", requireAuth, async (req, res) => {
   try {
-    const lat = req.query.lat || 11.94;   // Đà Lạt, Lâm Đồng
+    const lat = req.query.lat || 11.94;   // mặc định: Đà Lạt, Lâm Đồng
     const lon = req.query.lon || 108.44;
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code`;
+    const current = [
+      "temperature_2m", "relative_humidity_2m", "apparent_temperature",
+      "is_day", "precipitation", "rain", "weather_code", "cloud_cover",
+      "pressure_msl", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m"
+    ].join(",");
+    const hourly = "precipitation_probability";
+    const daily = [
+      "temperature_2m_max", "temperature_2m_min",
+      "precipitation_probability_max", "precipitation_sum",
+      "wind_speed_10m_max", "sunrise", "sunset", "uv_index_max"
+    ].join(",");
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+      `&current=${current}&hourly=${hourly}&daily=${daily}` +
+      `&timezone=auto&wind_speed_unit=ms&forecast_days=1`;
     const r = await fetch(url);
     const j = await r.json();
+    const c = j.current || {};
+
+    // Xác suất mưa của giờ hiện tại (lấy từ mảng hourly gần nhất)
+    let precipProb = null;
+    if (j.hourly && Array.isArray(j.hourly.precipitation_probability)) {
+      const times = j.hourly.time || [];
+      const nowH = new Date().getHours();
+      let idx = times.findIndex(t => new Date(t).getHours() === nowH);
+      if (idx < 0) idx = 0;
+      precipProb = j.hourly.precipitation_probability[idx];
+    }
+    const d = j.daily || {};
+
     res.json({
-      temp: j.current.temperature_2m,
-      humidity: j.current.relative_humidity_2m,
-      code: j.current.weather_code,
-      place: req.query.place || "Đà Lạt"
+      place: req.query.place || "Đà Lạt",
+      lat: Number(lat), lon: Number(lon),
+      temp: c.temperature_2m,
+      feels: c.apparent_temperature,
+      humidity: c.relative_humidity_2m,
+      precip: c.precipitation,
+      rain: c.rain,
+      precipProb,
+      code: c.weather_code,
+      isDay: c.is_day,
+      cloud: c.cloud_cover,
+      pressure: c.pressure_msl,
+      windSpeed: c.wind_speed_10m,
+      windDir: c.wind_direction_10m,
+      windGust: c.wind_gusts_10m,
+      tempMax: d.temperature_2m_max ? d.temperature_2m_max[0] : null,
+      tempMin: d.temperature_2m_min ? d.temperature_2m_min[0] : null,
+      precipProbMax: d.precipitation_probability_max ? d.precipitation_probability_max[0] : null,
+      precipSum: d.precipitation_sum ? d.precipitation_sum[0] : null,
+      windMax: d.wind_speed_10m_max ? d.wind_speed_10m_max[0] : null,
+      uvMax: d.uv_index_max ? d.uv_index_max[0] : null,
+      sunrise: d.sunrise ? d.sunrise[0] : null,
+      sunset: d.sunset ? d.sunset[0] : null,
+      units: {
+        temp: (j.current_units || {}).temperature_2m || "°C",
+        wind: (j.current_units || {}).wind_speed_10m || "m/s",
+        humidity: "%"
+      }
     });
   } catch (e) {
     res.status(502).json({ error: "weather unavailable" });

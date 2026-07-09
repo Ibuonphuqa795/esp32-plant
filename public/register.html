@@ -5,34 +5,55 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SPORO — Đăng ký</title>
   <style>
-    :root { --green:#16a34a; --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif; }
-    [data-theme="light"] { --bg:#f4f5fb; --card:#fff; --text:#1f2430; --muted:#8a93a6; --hair:#e6e9f2; --field:#f5f7fb; }
-    [data-theme="dark"]  { --bg:#0b0f1a; --card:#141926; --text:#e8ecf4; --muted:#8a94a8; --hair:#232b3a; --field:#1b2230; }
-    * { box-sizing:border-box; margin:0; padding:0; -webkit-font-smoothing:antialiased; }
-    body { font-family:var(--font); min-height:100vh; display:grid; place-items:center; padding:20px;
-      background:radial-gradient(1100px 550px at 80% -10%, rgba(22,163,74,.18), transparent), var(--bg);
-      color:var(--text); transition:background .3s; }
-    .card { width:100%; max-width:400px; background:var(--card); border:1px solid var(--hair); border-radius:24px; padding:38px 32px; box-shadow:0 20px 60px rgba(20,30,60,.12); }
-    .brand { display:flex; align-items:center; gap:12px; margin-bottom:24px; }
-    .logo { width:52px; height:52px; border-radius:15px; background:linear-gradient(135deg,var(--green),#15803d); display:grid; place-items:center; font-size:28px; box-shadow:0 6px 20px rgba(22,163,74,.4); }
-    .brand b { font-size:26px; font-weight:800; letter-spacing:.5px; } .brand small { display:block; font-size:11px; color:var(--muted); }
-    h1 { font-size:19px; font-weight:700; margin-bottom:4px; } .sub { font-size:13px; color:var(--muted); margin-bottom:22px; }
-    label { font-size:13px; color:var(--muted); font-weight:600; display:block; margin-bottom:7px; }
-    .inp { width:100%; padding:12px 15px; border-radius:13px; border:1px solid var(--hair); background:var(--field); color:var(--text); font-size:15px; font-family:var(--font); outline:none; margin-bottom:14px; transition:.15s; }
-    .inp:focus { border-color:var(--green); background:var(--card); }
-    .btn { width:100%; padding:14px; border-radius:13px; border:none; cursor:pointer; background:var(--green); color:#fff; font-weight:700; font-size:16px; font-family:var(--font); transition:.15s; margin-top:4px; }
-    .btn:hover { filter:brightness(1.06); } .btn:active { transform:scale(.98); } .btn:disabled { opacity:.6; cursor:default; }
-    .msg { font-size:13px; font-weight:600; padding:11px 14px; border-radius:11px; margin-bottom:14px; display:none; }
-    .msg.show { display:block; } .msg.err { background:rgba(239,68,68,.12); color:#ef4444; } .msg.ok { background:rgba(22,163,74,.12); color:var(--green); }
-    .foot { text-align:center; font-size:13px; color:var(--muted); margin-top:20px; }
-    .foot a { color:var(--green); font-weight:600; text-decoration:none; }
-    .theme { position:fixed; top:20px; right:20px; width:42px; height:42px; border-radius:50%; border:1px solid var(--hair); background:var(--card); color:var(--text); font-size:18px; cursor:pointer; display:grid; place-items:center; }
+    :root{--green:#22a565;--font:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif;
+      --blur:saturate(180%) blur(22px);--ease:cubic-bezier(.32,.72,0,1)}
+    [data-theme="light"]{--text:#1b2230;--muted:#6c7689;--faint:#9aa3b4;--page:#e9edf6;
+      --b1:rgba(34,165,101,.20);--b2:rgba(106,114,230,.16);--b3:rgba(58,160,224,.16);
+      --glass:rgba(255,255,255,.55);--brd:rgba(255,255,255,.85);--brd-soft:rgba(120,130,160,.16);
+      --tile:rgba(255,255,255,.5);--hi:inset 0 1px 0 rgba(255,255,255,.9);--shadow:0 20px 60px rgba(28,40,72,.14)}
+    [data-theme="dark"]{--green:#34d491;--text:#e9edf6;--muted:#98a2b8;--faint:#6c7488;--page:#080b12;
+      --b1:rgba(34,165,101,.22);--b2:rgba(106,114,230,.20);--b3:rgba(58,160,224,.18);
+      --glass:rgba(28,35,52,.55);--brd:rgba(255,255,255,.10);--brd-soft:rgba(255,255,255,.07);
+      --tile:rgba(40,48,68,.45);--hi:inset 0 1px 0 rgba(255,255,255,.08);--shadow:0 24px 60px rgba(0,0,0,.5)}
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+    body{font-family:var(--font);min-height:100vh;display:grid;place-items:center;padding:20px;
+      background:var(--page);color:var(--text);transition:background .4s;overflow:hidden}
+    .bgfx{position:fixed;inset:0;z-index:-1;overflow:hidden}
+    .bgfx span{position:absolute;border-radius:50%;filter:blur(80px)}
+    .bgfx .a{width:560px;height:560px;background:var(--b1);top:-140px;left:-80px}
+    .bgfx .b{width:520px;height:520px;background:var(--b2);bottom:-160px;right:-100px}
+    .bgfx .c{width:440px;height:440px;background:var(--b3);top:40%;left:50%}
+    .card{width:100%;max-width:410px;background:var(--glass);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
+      border:1px solid var(--brd);border-radius:30px;padding:40px 34px;box-shadow:var(--shadow),var(--hi)}
+    .brand{display:flex;align-items:center;gap:13px;margin-bottom:26px}
+    .mk{width:48px;height:48px;border-radius:15px;background:linear-gradient(140deg,var(--green),#12855a);
+      box-shadow:0 8px 22px rgba(34,165,101,.42),var(--hi);position:relative;flex-shrink:0}
+    .mk::after{content:"";position:absolute;inset:13px;border-radius:7px;background:linear-gradient(135deg,rgba(255,255,255,.92),rgba(255,255,255,.3))}
+    .brand b{font-size:25px;font-weight:800;letter-spacing:.5px}
+    .brand small{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+    h1{font-size:20px;font-weight:800;margin-bottom:4px}
+    .sub{font-size:13px;color:var(--muted);margin-bottom:24px}
+    label{font-size:12.5px;color:var(--muted);font-weight:700;display:block;margin-bottom:8px}
+    .inp{width:100%;padding:12px 15px;border-radius:14px;border:1px solid var(--brd);background:var(--tile);
+      color:var(--text);font-size:15px;font-family:var(--font);outline:none;margin-bottom:14px;transition:.15s}
+    .inp:focus{border-color:var(--green);background:var(--glass)}
+    .btn{width:100%;padding:15px;border-radius:15px;border:none;cursor:pointer;background:var(--green);color:#fff;
+      font-weight:800;font-size:16px;font-family:var(--font);transition:.15s;margin-top:4px;box-shadow:0 10px 24px rgba(34,165,101,.32)}
+    .btn:hover{filter:brightness(1.06)}.btn:active{transform:scale(.98)}.btn:disabled{opacity:.6;cursor:default}
+    .msg{font-size:13px;font-weight:700;padding:12px 14px;border-radius:12px;margin-bottom:14px;display:none}
+    .msg.show{display:block}.msg.err{background:rgba(224,101,101,.14);color:#e06565}.msg.ok{background:rgba(34,165,101,.14);color:var(--green)}
+    .foot{text-align:center;font-size:13px;color:var(--muted);margin-top:20px}
+    .foot a{color:var(--green);font-weight:700;text-decoration:none}
+    .theme{position:fixed;top:22px;right:22px;height:40px;padding:0 16px;border-radius:20px;border:1px solid var(--brd);
+      background:var(--glass);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
+      color:var(--text);font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font)}
   </style>
 </head>
 <body>
-  <button class="theme" id="themeBtn">🌙</button>
+  <div class="bgfx"><span class="a"></span><span class="b"></span><span class="c"></span></div>
+  <button class="theme" id="themeBtn">Tối</button>
   <div class="card">
-    <div class="brand"><div class="logo">🌱</div><div><b>SPORO</b><small>Team BRUTICUS · HCMUT</small></div></div>
+    <div class="brand"><div class="mk"></div><div><b>SPORO</b><small>Team BRUTICUS · HCMUT</small></div></div>
     <h1>Tạo tài khoản</h1>
     <div class="sub">Đăng ký để truy cập hệ thống giám sát vườn ươm</div>
     <div class="msg" id="msg"></div>
@@ -47,31 +68,22 @@
     </form>
     <div class="foot">Đã có tài khoản? <a href="/login.html">Đăng nhập</a></div>
   </div>
-
   <script>
-    const root = document.documentElement;
-    const saved = localStorage.getItem("sporo-theme") || "light";
-    root.setAttribute("data-theme", saved);
-    const tb = document.getElementById("themeBtn");
-    tb.textContent = saved === "dark" ? "🌙" : "☀️";
-    tb.onclick = () => { const t = root.getAttribute("data-theme") === "dark" ? "light" : "dark"; root.setAttribute("data-theme", t); localStorage.setItem("sporo-theme", t); tb.textContent = t === "dark" ? "🌙" : "☀️"; };
-
-    const form = document.getElementById("form"), msg = document.getElementById("msg"), btn = document.getElementById("btn");
-    form.onsubmit = async (e) => {
-      e.preventDefault();
-      msg.className = "msg";
-      btn.disabled = true; btn.textContent = "Đang tạo…";
-      try {
-        const r = await fetch("/api/register", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: document.getElementById("name").value, user: document.getElementById("user").value, pass: document.getElementById("pass").value })
-        });
-        const j = await r.json();
-        if (j.ok) { msg.textContent = "Tạo tài khoản thành công! Đang vào hệ thống…"; msg.className = "msg ok show"; setTimeout(() => window.location.href = "/", 800); }
-        else { msg.textContent = j.error || "Đăng ký thất bại"; msg.className = "msg err show"; btn.disabled = false; btn.textContent = "Đăng ký"; }
-      } catch (e) {
-        msg.textContent = "Không kết nối được server"; msg.className = "msg err show"; btn.disabled = false; btn.textContent = "Đăng ký";
-      }
+    const root=document.documentElement,saved=localStorage.getItem("sporo-theme")||"light";
+    root.setAttribute("data-theme",saved);
+    const tb=document.getElementById("themeBtn");
+    tb.textContent=saved==="dark"?"Sáng":"Tối";
+    tb.onclick=()=>{const t=root.getAttribute("data-theme")==="dark"?"light":"dark";root.setAttribute("data-theme",t);localStorage.setItem("sporo-theme",t);tb.textContent=t==="dark"?"Sáng":"Tối";};
+    const form=document.getElementById("form"),msg=document.getElementById("msg"),btn=document.getElementById("btn");
+    form.onsubmit=async(e)=>{
+      e.preventDefault(); msg.className="msg"; btn.disabled=true; btn.textContent="Đang tạo…";
+      try{
+        const r=await fetch("/api/register",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({name:document.getElementById("name").value,user:document.getElementById("user").value,pass:document.getElementById("pass").value})});
+        const j=await r.json();
+        if(j.ok){ msg.textContent="Tạo tài khoản thành công! Đang vào hệ thống…"; msg.className="msg ok show"; setTimeout(()=>window.location.href="/",800); }
+        else{ msg.textContent=j.error||"Đăng ký thất bại"; msg.className="msg err show"; btn.disabled=false; btn.textContent="Đăng ký"; }
+      }catch(e){ msg.textContent="Không kết nối được server"; msg.className="msg err show"; btn.disabled=false; btn.textContent="Đăng ký"; }
     };
   </script>
 </body>
