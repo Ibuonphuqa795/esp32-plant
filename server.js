@@ -173,7 +173,12 @@ app.use(express.static(path.join(__dirname, "public"), { index: false }));
 // ============================================================
 // CẤU HÌNH & TRẠNG THÁI
 // ============================================================
-let config = { moistureOn: 45, moistureOff: 65, tempMin: 25, tempMax: 30, waterDuration: 13 };
+let config = {
+  moistureOn: 45, moistureOff: 65, tempMin: 25, tempMax: 30, waterDuration: 13,
+  rainDelay: false, rainProbThreshold: 70,     // hoãn tưới khi xác suất mưa ≥ ngưỡng
+  schedule: [],                                 // lịch tưới theo giờ: ["06:00","17:00"]
+  weatherLat: 11.94, weatherLon: 108.44, weatherPlace: "Đà Lạt"
+};
 
 let latest = { temp: null, moisture: null, time: null };
 const history = [];
@@ -184,9 +189,147 @@ let valveState = "OFF";
 let manualMode = null; // "ON" = giữ van mở thủ công (auto không được tắt); null = tự động
 let inZoneCount = 0, totalCount = 0;
 
+// Trạng thái cho các tính năng mới
+let rainProbNow = null;          // xác suất mưa hiện tại (server tự lấy) → hoãn tưới
+let rainSkipActive = false;      // đang hoãn tưới do mưa (tránh ghi log lặp)
+let lastAlertAt = {};            // chống spam cảnh báo Telegram
+let disconnectAlerted = false;   // đã báo mất kết nối ESP32 chưa
+let lastSchedFire = "";          // tránh kích hoạt lịch 2 lần trong cùng 1 phút
+
 function addEvent(type, detail, meta) {
-  events.unshift({ time: new Date().toISOString(), type, detail, meta: meta || null });
+  const ev = { time: new Date().toISOString(), type, detail, meta: meta || null };
+  events.unshift(ev);
   if (events.length > MAX_EVENTS) events.pop();
+  dbInsertEvent(ev);
+}
+
+// ============================================================
+// LƯU TRỮ DỮ LIỆU (Postgres) — bền vững, không mất khi restart
+// ============================================================
+async function initData() {
+  if (!USE_DB) {
+    console.log("Data: dùng RAM (chưa có DATABASE_URL — lịch sử mất khi khởi động lại)");
+    return;
+  }
+  await pool.query(`CREATE TABLE IF NOT EXISTS readings (
+    id bigserial PRIMARY KEY, ts timestamptz DEFAULT now(), temp real, moisture real)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_readings_ts ON readings(ts)`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS sensor_events (
+    id bigserial PRIMARY KEY, ts timestamptz DEFAULT now(), type text, detail text, meta jsonb)`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS app_config (id int PRIMARY KEY DEFAULT 1, data jsonb)`);
+  // Nạp lại cấu hình đã lưu
+  try {
+    const r = await pool.query("SELECT data FROM app_config WHERE id=1");
+    if (r.rows[0] && r.rows[0].data) config = { ...config, ...r.rows[0].data };
+  } catch (e) {}
+  // Nạp lịch sử & sự kiện gần đây vào RAM
+  try {
+    const r = await pool.query("SELECT ts,temp,moisture FROM readings ORDER BY ts DESC LIMIT $1", [MAX_HISTORY]);
+    r.rows.reverse().forEach(x => history.push({ time: new Date(x.ts).toISOString(), temp: x.temp, moisture: x.moisture }));
+    if (history.length) latest = history[history.length - 1];
+    const totalR = await pool.query("SELECT count(*)::int c, count(*) FILTER (WHERE temp BETWEEN $1 AND $2)::int z FROM readings", [config.tempMin, config.tempMax]);
+    if (totalR.rows[0]) { totalCount = totalR.rows[0].c || 0; inZoneCount = totalR.rows[0].z || 0; }
+  } catch (e) {}
+  try {
+    const r = await pool.query("SELECT ts,type,detail,meta FROM sensor_events ORDER BY ts DESC LIMIT $1", [MAX_EVENTS]);
+    r.rows.forEach(x => events.push({ time: new Date(x.ts).toISOString(), type: x.type, detail: x.detail, meta: x.meta }));
+  } catch (e) {}
+  console.log("Data: dùng Postgres (lịch sử, sự kiện & cấu hình lưu vĩnh viễn)");
+}
+function dbInsertReading(temp, moisture, timeIso) {
+  if (!USE_DB || !pool) return;
+  pool.query("INSERT INTO readings(ts,temp,moisture) VALUES($1,$2,$3)", [timeIso, temp, moisture]).catch(() => {});
+}
+function dbInsertEvent(ev) {
+  if (!USE_DB || !pool) return;
+  pool.query("INSERT INTO sensor_events(ts,type,detail,meta) VALUES($1,$2,$3,$4)",
+    [ev.time, ev.type, ev.detail, ev.meta ? JSON.stringify(ev.meta) : null]).catch(() => {});
+}
+function dbSaveConfig() {
+  if (!USE_DB || !pool) return;
+  pool.query(`INSERT INTO app_config(id,data) VALUES(1,$1)
+    ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data`, [JSON.stringify(config)]).catch(() => {});
+}
+
+// ============================================================
+// CẢNH BÁO TELEGRAM (miễn phí) — bật bằng biến môi trường
+// TELEGRAM_BOT_TOKEN và TELEGRAM_CHAT_ID
+// ============================================================
+const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN, TG_CHAT = process.env.TELEGRAM_CHAT_ID;
+function sendTelegram(text) {
+  if (!TG_TOKEN || !TG_CHAT) return;
+  fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: TG_CHAT, text })
+  }).catch(() => {});
+}
+const ALERT_COOLDOWN = 15 * 60 * 1000; // 15 phút mỗi loại cảnh báo
+function fireAlert(key, text) {
+  const now = Date.now();
+  if (lastAlertAt[key] && now - lastAlertAt[key] < ALERT_COOLDOWN) return;
+  lastAlertAt[key] = now;
+  sendTelegram(text);
+}
+function checkAlerts(temp, moisture) {
+  if (temp > config.tempMax + 5) fireAlert("hot", `SPORO ⚠️ Nhiệt độ cao ${temp}°C (vượt ${config.tempMax + 5}°C)`);
+  else if (temp < config.tempMin - 5) fireAlert("cold", `SPORO ⚠️ Nhiệt độ thấp ${temp}°C`);
+  else lastAlertAt.hot = lastAlertAt.cold = 0;
+  if (moisture < config.moistureOn - 10) fireAlert("dry", `SPORO 💧 Đất quá khô ${moisture}% — kiểm tra hệ thống tưới`);
+  else lastAlertAt.dry = 0;
+}
+// Watchdog: cảnh báo khi ESP32 ngừng gửi dữ liệu quá lâu
+const DISCONNECT_MS = 10 * 60 * 1000;
+function checkDisconnect() {
+  if (!latest.time) return;
+  const gap = Date.now() - new Date(latest.time).getTime();
+  if (gap > DISCONNECT_MS && !disconnectAlerted) {
+    disconnectAlerted = true;
+    const mins = Math.round(gap / 60000);
+    sendTelegram(`SPORO 🔌 Mất kết nối ESP32 — không nhận dữ liệu ${mins} phút.`);
+    addEvent("Cảnh báo", `Mất kết nối ESP32 (${mins} phút)`, { kind: "offline", mins });
+  }
+}
+
+// ============================================================
+// HOÃN TƯỚI KHI SẮP MƯA — server tự lấy xác suất mưa định kỳ
+// ============================================================
+async function pollWeather() {
+  try {
+    const lat = config.weatherLat, lon = config.weatherLon;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation_probability&forecast_days=1&timezone=auto`;
+    const r = await fetch(url);
+    const j = await r.json();
+    if (j.hourly && Array.isArray(j.hourly.precipitation_probability)) {
+      const times = j.hourly.time || [], a = j.hourly.precipitation_probability;
+      const nowH = new Date().getHours();
+      let idx = times.findIndex(tt => new Date(tt).getHours() === nowH);
+      if (idx < 0) idx = 0;
+      // lấy max của giờ hiện tại và 1-2 giờ tới
+      rainProbNow = Math.max(a[idx] || 0, a[idx + 1] || 0, a[idx + 2] || 0);
+    }
+  } catch (e) {}
+}
+
+// ============================================================
+// LỊCH TƯỚI THEO GIỜ — kiểm tra định kỳ, khớp HH:MM (giờ VN)
+// ============================================================
+function checkSchedule() {
+  if (!config.schedule || !config.schedule.length) return;
+  const now = new Date().toLocaleTimeString("en-GB", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
+  if (config.schedule.includes(now) && lastSchedFire !== now) {
+    lastSchedFire = now;
+    const raining = config.rainDelay && rainProbNow != null && rainProbNow >= config.rainProbThreshold;
+    if (raining) {
+      addEvent("Hoãn", `Bỏ lịch tưới ${now} — sắp mưa (${rainProbNow}%)`, { kind: "rain_skip_sched", time: now, prob: rainProbNow });
+      return;
+    }
+    valveState = "ON"; manualMode = "ON";
+    addEvent("Tưới", `Tưới theo lịch ${now} (${config.waterDuration}s)`, { kind: "sched_on", time: now, dur: config.waterDuration });
+    setTimeout(() => {
+      valveState = "OFF"; manualMode = null;
+      addEvent("Tắt", `Kết thúc tưới theo lịch ${now}`, { kind: "sched_off", time: now });
+    }, Math.max(3, config.waterDuration) * 1000);
+  }
 }
 
 // ---- ESP32 gửi dữ liệu (KHÔNG cần đăng nhập) ----
@@ -199,24 +342,41 @@ app.get("/api/update", (req, res) => {
   latest = { temp, moisture, time: new Date().toISOString() };
   history.push(latest);
   if (history.length > MAX_HISTORY) history.shift();
+  dbInsertReading(temp, moisture, latest.time);
+  disconnectAlerted = false; // vừa có dữ liệu → xoá cờ mất kết nối
 
   totalCount++;
   if (temp >= config.tempMin && temp <= config.tempMax) inZoneCount++;
 
   // Bỏ qua điều khiển tự động khi đang tưới THỦ CÔNG (giữ van mở tới khi bấm Dừng)
   if (manualMode !== "ON") {
+    const raining = config.rainDelay && rainProbNow != null && rainProbNow >= config.rainProbThreshold;
     if (valveState === "OFF" && moisture < config.moistureOn) {
-      valveState = "ON";
-      addEvent("Tưới", `Ẩm ${moisture}% < ${config.moistureOn}% → tưới ${config.waterDuration}s`,
-        { kind: "water", moisture, on: config.moistureOn, dur: config.waterDuration });
+      if (raining) {
+        // Hoãn tưới vì sắp mưa — chỉ ghi log 1 lần cho mỗi đợt khô
+        if (!rainSkipActive) {
+          rainSkipActive = true;
+          addEvent("Hoãn", `Hoãn tưới — xác suất mưa ${rainProbNow}% ≥ ${config.rainProbThreshold}%`,
+            { kind: "rain_skip", prob: rainProbNow, moisture });
+        }
+      } else {
+        rainSkipActive = false;
+        valveState = "ON";
+        addEvent("Tưới", `Ẩm ${moisture}% < ${config.moistureOn}% → tưới ${config.waterDuration}s`,
+          { kind: "water", moisture, on: config.moistureOn, dur: config.waterDuration });
+      }
     } else if (valveState === "ON" && moisture >= config.moistureOff) {
       valveState = "OFF";
       addEvent("Tắt", `Ẩm đạt ${moisture}% ≥ ${config.moistureOff}% → tắt van`,
         { kind: "stop", moisture, off: config.moistureOff });
+    } else if (moisture >= config.moistureOn) {
+      rainSkipActive = false; // đất đủ ẩm → kết thúc đợt hoãn
     }
   }
   if (temp > config.tempMax + 5) addEvent("Cảnh báo", `Nhiệt độ cao ${temp}°C`, { kind: "hot", temp });
   else if (temp < config.tempMin - 5) addEvent("Cảnh báo", `Nhiệt độ thấp ${temp}°C`, { kind: "cold", temp });
+
+  checkAlerts(temp, moisture); // gửi cảnh báo Telegram (nếu đã cấu hình)
 
   res.json({ ok: true, received: latest, valve: valveState });
 });
@@ -244,21 +404,45 @@ app.get("/api/data", requireAuth, (req, res) => {
   res.json({
     latest, history, events, valveState, config,
     user: req.user.name,
+    rainProbNow, rainSkipActive,
     stats: { wateringToday, lastWateringTime: lastWatering ? lastWatering.time : null, favorablePercent },
     daily
   });
 });
 
+// ---- Lịch sử nhiều ngày (từ DB, gộp theo giờ) cho biểu đồ dài hạn ----
+app.get("/api/history", requireAuth, async (req, res) => {
+  const days = Math.min(30, Math.max(1, parseInt(req.query.days) || 7));
+  if (!USE_DB || !pool) {
+    return res.json({ db: false, points: history.map(h => ({ t: h.time, temp: h.temp, moisture: h.moisture })) });
+  }
+  try {
+    const r = await pool.query(
+      `SELECT date_trunc('hour', ts) AS h, avg(temp) AS temp, avg(moisture) AS moisture
+       FROM readings WHERE ts > now() - (($1)::text || ' days')::interval
+       GROUP BY h ORDER BY h`, [String(days)]);
+    res.json({ db: true, points: r.rows.map(x => ({ t: x.h, temp: Number(x.temp), moisture: Number(x.moisture) })) });
+  } catch (e) {
+    res.status(500).json({ error: "history error" });
+  }
+});
+
 app.get("/api/config", requireAuth, (req, res) => res.json(config));
 app.post("/api/config", requireAuth, (req, res) => {
-  const { moistureOn, moistureOff, tempMin, tempMax, waterDuration } = req.body || {};
-  if (moistureOn != null) config.moistureOn = Number(moistureOn);
-  if (moistureOff != null) config.moistureOff = Number(moistureOff);
-  if (tempMin != null) config.tempMin = Number(tempMin);
-  if (tempMax != null) config.tempMax = Number(tempMax);
-  if (waterDuration != null) config.waterDuration = Number(waterDuration);
-  addEvent("Cấu hình", `Cập nhật ngưỡng: tưới<${config.moistureOn}% / tắt≥${config.moistureOff}%`,
-    { kind: "config", on: config.moistureOn, off: config.moistureOff });
+  const b = req.body || {};
+  ["moistureOn", "moistureOff", "tempMin", "tempMax", "waterDuration", "rainProbThreshold", "weatherLat", "weatherLon"]
+    .forEach(k => { if (b[k] != null && b[k] !== "" && !Number.isNaN(Number(b[k]))) config[k] = Number(b[k]); });
+  if (b.rainDelay != null) config.rainDelay = !!b.rainDelay;
+  if (Array.isArray(b.schedule)) config.schedule = b.schedule.filter(s => /^\d{2}:\d{2}$/.test(s)).slice(0, 12);
+  if (b.weatherPlace != null) config.weatherPlace = String(b.weatherPlace).slice(0, 80);
+  // Chỉ ghi log khi thay đổi NGƯỠNG (tránh ồn khi chỉ đổi vị trí thời tiết)
+  const changedThresh = ["moistureOn", "moistureOff", "tempMin", "tempMax", "waterDuration"].some(k => b[k] != null);
+  if (changedThresh) {
+    addEvent("Cấu hình", `Cập nhật ngưỡng: tưới<${config.moistureOn}% / tắt≥${config.moistureOff}%`,
+      { kind: "config", on: config.moistureOn, off: config.moistureOff });
+  }
+  dbSaveConfig();
+  if (b.weatherLat != null || b.weatherLon != null) pollWeather(); // cập nhật ngay xác suất mưa cho vị trí mới
   res.json({ ok: true, config });
 });
 
@@ -444,7 +628,13 @@ app.get("/api/weather", requireAuth, async (req, res) => {
 app.get("/health", (req, res) => res.send("OK"));
 
 initAuth()
-  .catch(e => console.error("Lỗi khởi tạo Auth:", e.message))
+  .then(() => initData())
+  .catch(e => console.error("Lỗi khởi tạo:", e.message))
   .finally(() => {
+    // Tác vụ nền
+    pollWeather();                              // lấy xác suất mưa ngay
+    setInterval(pollWeather, 10 * 60 * 1000);   // và mỗi 10 phút
+    setInterval(checkSchedule, 30 * 1000);      // kiểm tra lịch tưới mỗi 30s
+    setInterval(checkDisconnect, 60 * 1000);    // watchdog mất kết nối mỗi 60s
     app.listen(PORT, () => console.log(`SPORO server chay tai http://localhost:${PORT}`));
   });

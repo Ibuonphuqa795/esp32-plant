@@ -266,6 +266,10 @@
     .minibtn{height:38px;padding:0 14px;border-radius:11px;border:1px solid var(--brd);background:var(--tile);color:var(--text);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;text-align:center}
     .tag.btn{display:inline-flex;align-items:center;justify-content:center;text-align:center}
     .minibtn.danger{color:var(--rose)} .minibtn.green{background:var(--green);color:#fff;border-color:transparent}
+    .schedrow{display:flex;gap:8px;align-items:center}
+    .schedchip{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:11px;background:var(--tile);border:1px solid var(--brd-soft);font-size:13px;font-weight:700}
+    .schedchip .x{cursor:pointer;color:var(--rose);font-weight:800}
+    .schedchip .x:hover{opacity:.7}
 
     /* location popover */
     .locpop{position:fixed;z-index:65;width:320px;max-width:90vw;padding:16px;display:none}
@@ -548,7 +552,16 @@
 
     <div class="divider"></div>
     <div class="subhead"><span data-i18n="dr.range">Khoảng thời gian biểu đồ</span></div>
-    <div class="seg" id="rangeSeg"><button data-range="20" data-i18n="seg.20">20 điểm</button><button data-range="50" class="active" data-i18n="seg.50">50 điểm</button><button data-range="0" data-i18n="seg.all">Tất cả</button></div>
+    <div class="seg" id="rangeSeg"><button data-range="20" data-i18n="seg.20">20 điểm</button><button data-range="50" class="active" data-i18n="seg.50">50 điểm</button><button data-range="0" data-i18n="seg.all">Tất cả</button><button data-range="week" data-i18n="seg.week">7 ngày</button></div>
+
+    <div class="divider"></div>
+    <div class="subhead"><span data-i18n="dr.smart">Tưới thông minh</span></div>
+    <div class="toggle-row"><span data-i18n="dr.rain">Hoãn tưới khi sắp mưa</span><label class="switch"><input type="checkbox" id="rainToggle"><span class="slider"></span></label></div>
+    <div class="field"><label><span data-i18n="dr.rainTh">Ngưỡng xác suất mưa</span> <b><span id="rainThVal">70</span>%</b></label><input type="range" id="rainTh" min="30" max="100" value="70"></div>
+    <div class="subhead" style="margin-top:6px"><span data-i18n="dr.sched">Lịch tưới theo giờ</span></div>
+    <div class="schedrow"><input class="inp" id="schedInput" type="time" style="margin-bottom:0"><button class="minibtn green" id="schedAdd" data-i18n="dr.add">+ Thêm</button></div>
+    <div id="schedList" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"></div>
+    <div class="hint" id="tgHint" style="margin-top:14px" data-i18n="dr.tg">Cảnh báo Telegram: đặt biến môi trường TELEGRAM_BOT_TOKEN và TELEGRAM_CHAT_ID trên máy chủ để nhận cảnh báo nhiệt độ / khô hạn / mất kết nối.</div>
 
     <div class="divider"></div>
     <div class="subhead"><span data-i18n="dr.thresh">Ngưỡng điều khiển</span></div>
@@ -587,6 +600,8 @@
         "sec.params":"Thông số mục tiêu","sec.tmin":"Nhiệt thấp (°C)","sec.tmax":"Nhiệt cao (°C)","sec.moist":"Ẩm mục tiêu (%)","sec.note":"Ghi chú",
         "ov.title":"Tổng quan toàn khu","ov.sub":"Thông số các khu đang ươm — hiển thị song song","ov.close":"Đóng","ov.total":"Số khu","ov.temp":"Nhiệt độ (khu đo)","ov.moist":"Độ ẩm (khu đo)","ov.fav":"Chỉ số thuận lợi","ov.target":"Mục tiêu","ov.note":"Ghi chú","ov.active":"Đang đo","ov.nolive":"Chưa gắn cảm biến","ov.temp2":"Nhiệt","ov.moist2":"Ẩm",
         "map.label":"Bản đồ","dr.darktint":"Nền chế độ tối: Đen ↔ Xanh lá",
+        "dr.smart":"Tưới thông minh","dr.rain":"Hoãn tưới khi sắp mưa","dr.rainTh":"Ngưỡng xác suất mưa","dr.sched":"Lịch tưới theo giờ","dr.add":"+ Thêm","seg.week":"7 ngày","ev.delay":"Hoãn",
+        "dr.tg":"Cảnh báo Telegram: đặt biến môi trường TELEGRAM_BOT_TOKEN và TELEGRAM_CHAT_ID trên máy chủ để nhận cảnh báo nhiệt độ / khô hạn / mất kết nối.",
         "mq.label":"Chỉ số thuận lợi","mq.good":"Tốt","mq.watch":"Theo dõi","mq.cap":"Tỉ lệ mẫu nhiệt trong vùng thuận lợi",
         "stt.valve":"Trạng thái tưới","valve.open":"Đang mở","valve.closed":"Đóng","stt.timesToday":"lần hôm nay",
         "t.temp":"Nhiệt độ vườn","t.moist":"Độ ẩm đất","t.valve":"Van tưới","t.today":"Tưới hôm nay","t.delta":"Chênh trong/ngoài","t.samples":"Mẫu đã ghi",
@@ -629,6 +644,8 @@
         "sec.params":"Target parameters","sec.tmin":"Temp low (°C)","sec.tmax":"Temp high (°C)","sec.moist":"Target moisture (%)","sec.note":"Note",
         "ov.title":"All-section overview","ov.sub":"Live parameters of all growing sections, side by side","ov.close":"Close","ov.total":"Sections","ov.temp":"Temperature (active)","ov.moist":"Moisture (active)","ov.fav":"Favorable index","ov.target":"Target","ov.note":"Note","ov.active":"Measuring","ov.nolive":"No sensor yet","ov.temp2":"Temp","ov.moist2":"Moist",
         "map.label":"Map","dr.darktint":"Dark background: Black ↔ Green",
+        "dr.smart":"Smart watering","dr.rain":"Delay watering when rain is coming","dr.rainTh":"Rain probability threshold","dr.sched":"Scheduled watering","dr.add":"+ Add","seg.week":"7 days","ev.delay":"Delay",
+        "dr.tg":"Telegram alerts: set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID env vars on the server to receive heat / dry / disconnect alerts.",
         "mq.label":"Favorable index","mq.good":"Good","mq.watch":"Monitor","mq.cap":"Share of samples within the favorable range",
         "stt.valve":"Irrigation status","valve.open":"Open","valve.closed":"Closed","stt.timesToday":"today",
         "t.temp":"Garden temp","t.moist":"Soil moisture","t.valve":"Valve","t.today":"Watered today","t.delta":"Indoor/outdoor Δ","t.samples":"Samples logged",
@@ -881,7 +898,9 @@
     const locBtn=document.getElementById("locBtn"),locPop=document.getElementById("locPop"),
           locInput=document.getElementById("locInput"),locRes=document.getElementById("locRes");
     document.getElementById("wxPlace").textContent=loc.place;
-    function setLoc(o){ loc=o; localStorage.setItem("sporo-loc",JSON.stringify(loc)); document.getElementById("wxPlace").textContent=loc.place; moveMap(); loadWeather(); }
+    function setLoc(o){ loc=o; localStorage.setItem("sporo-loc",JSON.stringify(loc)); document.getElementById("wxPlace").textContent=loc.place; moveMap(); loadWeather();
+      // gửi vị trí về server để tính năng "hoãn tưới khi mưa" dùng đúng địa điểm
+      fetch("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({weatherLat:loc.lat,weatherLon:loc.lon,weatherPlace:loc.place})}).catch(()=>{}); }
     function openLocPop(){ const r=locBtn.getBoundingClientRect();
       locPop.style.left=Math.min(r.left,window.innerWidth-340)+"px"; locPop.style.top=(r.bottom+8)+"px";
       locPop.classList.add("open"); locInput.value=""; locRes.innerHTML=""; locInput.focus(); }
@@ -911,7 +930,7 @@
 
     /* ================= CHARTS ================= */
     let tempChart,moistChart,zoneDonut,waterBar;
-    let chartRange=50,lastData=null,lastWx=null;
+    let chartRange=50,lastData=null,lastWx=null,chartMode="live";
     let cfg={moistureOn:45,moistureOff:65,tempMin:25,tempMax:30,waterDuration:13};
     function gradFill(hex){ return (c)=>{ const ch=c.chart, {ctx,chartArea}=ch; if(!chartArea) return "transparent";
       const g=ctx.createLinearGradient(0,chartArea.top,0,chartArea.bottom); g.addColorStop(0,hex+"55"); g.addColorStop(.6,hex+"1a"); g.addColorStop(1,hex+"00"); return g; }; }
@@ -942,17 +961,19 @@
         options:{responsive:true,maintainAspectRatio:true,animation:{duration:600},plugins:{legend:{display:false},tooltip:{backgroundColor:rgba(cssVar("--glass-rgb"),.92),titleColor:cssVar("--text"),bodyColor:cssVar("--text"),borderColor:cssVar("--brd-soft"),borderWidth:1,padding:10,cornerRadius:10,displayColors:false}},
           scales:{x:{ticks:{color:muted,font:{size:10}},grid:{display:false}},y:{beginAtZero:true,ticks:{color:muted,precision:0,font:{size:11}},grid:{color:cssVar("--grid"),drawTicks:false}}}}});
     }
-    function rebuildChartsTheme(){ [tempChart,moistChart,zoneDonut,waterBar].forEach(c=>c&&c.destroy()); buildCharts(); if(lastData) renderCharts(lastData); }
+    function rebuildChartsTheme(){ [tempChart,moistChart,zoneDonut,waterBar].forEach(c=>c&&c.destroy()); buildCharts(); if(lastData) renderCharts(lastData); if(chartMode==="week"&&typeof loadWeek==="function") loadWeek(); }
     function slice(a){ return chartRange===0?a:a.slice(-chartRange); }
     function renderCharts(d){
-      const h=slice(d.history);
-      const labels=h.map(x=>new Date(x.time).toLocaleTimeString(locale(),{hour:"2-digit",minute:"2-digit"}));
-      tempChart.data.labels=labels; tempChart.data.datasets[0].data=h.map(x=>x.temp);
-      tempChart.options.plugins.annotation.annotations.zone.yMin=cfg.tempMin; tempChart.options.plugins.annotation.annotations.zone.yMax=cfg.tempMax; tempChart.update();
-      moistChart.data.labels=labels; moistChart.data.datasets[0].data=h.map(x=>x.moisture);
-      const ann=moistChart.options.plugins.annotation.annotations;
-      ann.on.yMin=ann.on.yMax=cfg.moistureOn; ann.on.label.content="ON "+cfg.moistureOn+"%";
-      ann.off.yMin=ann.off.yMax=cfg.moistureOff; ann.off.label.content="OFF "+cfg.moistureOff+"%"; moistChart.update();
+      if(chartMode==="live"){
+        const h=slice(d.history);
+        const labels=h.map(x=>new Date(x.time).toLocaleTimeString(locale(),{hour:"2-digit",minute:"2-digit"}));
+        tempChart.data.labels=labels; tempChart.data.datasets[0].data=h.map(x=>x.temp);
+        tempChart.options.plugins.annotation.annotations.zone.yMin=cfg.tempMin; tempChart.options.plugins.annotation.annotations.zone.yMax=cfg.tempMax; tempChart.update();
+        moistChart.data.labels=labels; moistChart.data.datasets[0].data=h.map(x=>x.moisture);
+        const ann=moistChart.options.plugins.annotation.annotations;
+        ann.on.yMin=ann.on.yMax=cfg.moistureOn; ann.on.label.content="ON "+cfg.moistureOn+"%";
+        ann.off.yMin=ann.off.yMax=cfg.moistureOff; ann.off.label.content="OFF "+cfg.moistureOff+"%"; moistChart.update();
+      }
       let inz=0,hot=0,cold=0;
       d.history.forEach(x=>{ if(x.temp>=cfg.tempMin&&x.temp<=cfg.tempMax) inz++; else if(x.temp>cfg.tempMax) hot++; else cold++; });
       const tot=inz+hot+cold||1;
@@ -967,8 +988,8 @@
     }
 
     /* ================= RENDER DATA ================= */
-    const EV_LABELKEY={"Tưới":"ev.water","Tắt":"ev.stop","Cảnh báo":"ev.alert","Cấu hình":"ev.config"};
-    const EV_CLS={"Tưới":"water","Tắt":"stop","Cảnh báo":"alert","Cấu hình":"config"};
+    const EV_LABELKEY={"Tưới":"ev.water","Tắt":"ev.stop","Cảnh báo":"ev.alert","Cấu hình":"ev.config","Hoãn":"ev.delay"};
+    const EV_CLS={"Tưới":"water","Tắt":"stop","Cảnh báo":"alert","Cấu hình":"config","Hoãn":"config"};
     function evDetail(e){ // dịch chi tiết sự kiện sang tiếng Anh (ưu tiên meta, dự phòng dịch từ chuỗi VN)
       if(lang==="vi") return e.detail;
       const m=e.meta;
@@ -980,6 +1001,11 @@
         case "config":return `Thresholds updated: water<${m.on}% / off≥${m.off}%`;
         case "manual_on":  return "Manual watering (valve on)";
         case "manual_off": return "Manual valve off";
+        case "rain_skip":  return `Watering delayed — rain chance ${m.prob}% ≥ ${cfg.rainProbThreshold}%`;
+        case "rain_skip_sched": return `Skipped schedule ${m.time} — rain coming (${m.prob}%)`;
+        case "sched_on":   return `Scheduled watering ${m.time} (${m.dur}s)`;
+        case "sched_off":  return `End of scheduled watering ${m.time}`;
+        case "offline":    return `ESP32 disconnected (${m.mins} min)`;
       }}
       const d=e.detail||""; let x;
       if((x=d.match(/Ẩm (\d+)% < (\d+)% → tưới (\d+)s/))) return `Moisture ${x[1]}% < ${x[2]}% → water ${x[3]}s`;
@@ -1123,13 +1149,40 @@
       fetch(`/api/update?temp=${temp.toFixed(1)}&moisture=${Math.round(demoMoist)}`).then(refresh).catch(()=>{}); }
     document.getElementById("demoToggle").onchange=e=>{ if(e.target.checked){ demoStep(); demoTimer=setInterval(demoStep,1200); } else clearInterval(demoTimer); };
 
-    /* ================= RANGE + SLIDERS ================= */
-    document.querySelectorAll("#rangeSeg button").forEach(b=>{ b.onclick=()=>{ document.querySelectorAll("#rangeSeg button").forEach(x=>x.classList.remove("active")); b.classList.add("active"); chartRange=parseInt(b.dataset.range); if(lastData) renderCharts(lastData); }; });
+    /* ================= RANGE + BIỂU ĐỒ 7 NGÀY ================= */
+    async function loadWeek(){
+      try{
+        const r=await fetch("/api/history?days=7"); const j=await r.json(); const pts=j.points||[];
+        const labels=pts.map(p=>new Date(p.t).toLocaleString(locale(),{day:"2-digit",month:"2-digit",hour:"2-digit"}));
+        tempChart.data.labels=labels; tempChart.data.datasets[0].data=pts.map(p=>p.temp!=null?+(+p.temp).toFixed(1):null); tempChart.update();
+        moistChart.data.labels=labels; moistChart.data.datasets[0].data=pts.map(p=>p.moisture!=null?Math.round(p.moisture):null); moistChart.update();
+      }catch(e){}
+    }
+    document.querySelectorAll("#rangeSeg button").forEach(b=>{ b.onclick=()=>{
+      document.querySelectorAll("#rangeSeg button").forEach(x=>x.classList.remove("active")); b.classList.add("active");
+      if(b.dataset.range==="week"){ chartMode="week"; loadWeek(); }
+      else { chartMode="live"; chartRange=parseInt(b.dataset.range); if(lastData) renderCharts(lastData); }
+    }; });
+
+    /* ================= SLIDERS + TƯỚI THÔNG MINH ================= */
     ["on","off","tmin","tmax","dur"].forEach(id=>{ const s=document.getElementById("s-"+id); s.oninput=()=>document.getElementById("v-"+id).textContent=s.value; });
-    function syncDrawerFromConfig(){ const map={on:cfg.moistureOn,off:cfg.moistureOff,tmin:cfg.tempMin,tmax:cfg.tempMax,dur:cfg.waterDuration};
-      for(const k in map){ const s=document.getElementById("s-"+k); if(document.activeElement!==s){ s.value=map[k]; document.getElementById("v-"+k).textContent=map[k]; } } }
+    document.getElementById("rainTh").oninput=e=>document.getElementById("rainThVal").textContent=e.target.value;
+    let schedule=[];
+    function renderSchedList(){
+      document.getElementById("schedList").innerHTML=schedule.length?schedule.map((tm,i)=>`<span class="schedchip">${tm}<span class="x" data-i="${i}">×</span></span>`).join(""):`<span class="hint">—</span>`;
+      document.querySelectorAll("#schedList .x").forEach(el=>{ el.onclick=()=>{ schedule.splice(+el.dataset.i,1); renderSchedList(); }; });
+    }
+    document.getElementById("schedAdd").onclick=()=>{ const v=document.getElementById("schedInput").value; if(/^\d{2}:\d{2}$/.test(v)&&!schedule.includes(v)){ schedule.push(v); schedule.sort(); renderSchedList(); } };
+    function syncDrawerFromConfig(){
+      const map={on:cfg.moistureOn,off:cfg.moistureOff,tmin:cfg.tempMin,tmax:cfg.tempMax,dur:cfg.waterDuration};
+      for(const k in map){ const s=document.getElementById("s-"+k); if(document.activeElement!==s){ s.value=map[k]; document.getElementById("v-"+k).textContent=map[k]; } }
+      document.getElementById("rainToggle").checked=!!cfg.rainDelay;
+      const rth=document.getElementById("rainTh"); if(document.activeElement!==rth){ rth.value=cfg.rainProbThreshold!=null?cfg.rainProbThreshold:70; document.getElementById("rainThVal").textContent=rth.value; }
+      schedule=Array.isArray(cfg.schedule)?cfg.schedule.slice():[]; renderSchedList();
+    }
     document.getElementById("saveBtn").onclick=async()=>{
-      const payload={moistureOn:+document.getElementById("s-on").value,moistureOff:+document.getElementById("s-off").value,tempMin:+document.getElementById("s-tmin").value,tempMax:+document.getElementById("s-tmax").value,waterDuration:+document.getElementById("s-dur").value};
+      const payload={moistureOn:+document.getElementById("s-on").value,moistureOff:+document.getElementById("s-off").value,tempMin:+document.getElementById("s-tmin").value,tempMax:+document.getElementById("s-tmax").value,waterDuration:+document.getElementById("s-dur").value,
+        rainDelay:document.getElementById("rainToggle").checked,rainProbThreshold:+document.getElementById("rainTh").value,schedule:schedule.slice()};
       const btn=document.getElementById("saveBtn"); btn.textContent=t("dr.saving");
       try{ const r=await fetch("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}); const j=await r.json(); cfg=j.config; rebuildChartsTheme(); await refresh(); syncDrawerFromConfig(); btn.textContent=t("dr.saved"); setTimeout(()=>{ btn.textContent=t("dr.save"); },900); }
       catch(e){ btn.textContent=t("dr.saveErr"); }
