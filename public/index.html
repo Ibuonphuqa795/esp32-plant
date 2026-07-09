@@ -32,9 +32,9 @@
     [data-theme="dark"]{
       --green:#34d491; --leaf:#5fd39a; --sky:#5cc0ff; --indigo:#8b93ff; --amber:#f2b45a; --rose:#ff8a8a; --violet:#c08bff;
       --text:#e6f2ec; --muted:#93a69c; --faint:#63756b;
-      --page:var(--page-dark,#07110c);
+      --page:var(--page-dark,#080d0b);
       --glass-rgb:24,36,30; --glass2-rgb:20,31,26;
-      --b1:rgba(34,190,120,var(--dg-a,.22)); --b2:rgba(46,150,110,.18); --b3:rgba(58,160,224,.14);
+      --b1:rgba(40,150,105,var(--dg-a,.13)); --b2:rgba(44,110,90,.08); --b3:rgba(60,110,140,.06);
       --brd:rgba(255,255,255,.10); --brd-soft:rgba(120,220,170,.09);
       --hi:inset 0 1px 0 rgba(255,255,255,.08);
       --shadow:0 14px 40px rgba(0,0,0,.45);
@@ -47,7 +47,7 @@
     body{font-family:var(--font);color:var(--text);font-size:14px;line-height:1.5;background:var(--page);
       transition:background .4s,color .4s;min-height:100vh;overflow-x:hidden}
     .bgfx{position:fixed;inset:0;z-index:-1;overflow:hidden}
-    .bgfx span{position:absolute;border-radius:50%;filter:blur(72px);opacity:.95}
+    .bgfx span{position:absolute;border-radius:50%;filter:blur(100px);opacity:.7}
     .bgfx .a{width:540px;height:540px;background:var(--b1);top:-130px;left:-60px}
     .bgfx .b{width:500px;height:500px;background:var(--b2);top:24%;right:-120px}
     .bgfx .c{width:560px;height:560px;background:var(--b3);bottom:-170px;left:32%}
@@ -314,8 +314,6 @@
   </style>
 </head>
 <body>
-  <div class="bgfx"><span class="a"></span><span class="b"></span><span class="c"></span></div>
-
   <div class="app">
     <aside class="sidebar" id="sidebar">
       <div class="brand"><div class="mk"></div><div><b>SPORO</b><small>Team BRUTICUS</small></div></div>
@@ -838,8 +836,8 @@
       const A=p(a),B=p(b); return "#"+A.map((v,i)=>Math.round(v+(B[i]-v)*tt).toString(16).padStart(2,"0")).join(""); }
     function applyDarkTint(level){
       const g=level/100;
-      root.style.setProperty("--page-dark",lerpHex("#000000","#0c2016",g)); // đen → xanh lá đậm
-      root.style.setProperty("--dg-a",(0.04+g*0.28).toFixed(3));
+      root.style.setProperty("--page-dark",lerpHex("#050706","#0a1712",g)); // đen → xanh rêu rất nhẹ (tự nhiên)
+      root.style.setProperty("--dg-a",(0.03+g*0.13).toFixed(3));            // quầng xanh tối đa ~0.16, không chói
       const dv=document.getElementById("darkTintVal"); if(dv) dv.textContent=Math.round(level);
       localStorage.setItem("sporo-darktint",level);
     }
