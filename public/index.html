@@ -483,7 +483,7 @@
         <!-- LOG + DAILY -->
         <section class="bottom" id="secLog">
           <div class="glass panel">
-            <div class="ph"><div><h3 data-i18n="p.eventLog">Lịch sử sự kiện</h3><div class="desc" data-i18n="p.eventD">Nhật ký tưới & cảnh báo</div></div></div>
+            <div class="ph"><div><h3 data-i18n="p.eventLog">Lịch sử sự kiện</h3><div class="desc" data-i18n="p.eventD">Nhật ký tưới & cảnh báo</div></div><span class="tag btn" id="clearLogBtn" data-i18n="p.clearLog">Xoá nhật ký</span></div>
             <table><thead><tr><th data-i18n="th.time">Thời gian</th><th data-i18n="th.event">Sự kiện</th><th data-i18n="th.detail">Chi tiết</th></tr></thead>
               <tbody id="eventBody"><tr><td colspan="3" class="empty" data-i18n="empty.events">Chưa có sự kiện</td></tr></tbody></table>
           </div>
@@ -598,7 +598,7 @@
         "sec.params":"Thông số mục tiêu","sec.tmin":"Nhiệt thấp (°C)","sec.tmax":"Nhiệt cao (°C)","sec.moist":"Ẩm mục tiêu (%)","sec.note":"Ghi chú",
         "ov.title":"Tổng quan toàn khu","ov.sub":"Thông số các khu đang ươm — hiển thị song song","ov.close":"Đóng","ov.total":"Số khu","ov.temp":"Nhiệt độ (khu đo)","ov.moist":"Độ ẩm (khu đo)","ov.fav":"Chỉ số thuận lợi","ov.target":"Mục tiêu","ov.note":"Ghi chú","ov.active":"Đang đo","ov.nolive":"Chưa gắn cảm biến","ov.temp2":"Nhiệt","ov.moist2":"Ẩm",
         "map.label":"Bản đồ","dr.darktint":"Nền chế độ tối: Đen ↔ Xanh lá",
-        "dr.smart":"Tưới thông minh","dr.rain":"Hoãn tưới khi sắp mưa","dr.rainTh":"Ngưỡng xác suất mưa","dr.sched":"Lịch tưới theo giờ","dr.add":"+ Thêm","seg.week":"7 ngày","ev.delay":"Hoãn",
+        "dr.smart":"Tưới thông minh","dr.rain":"Hoãn tưới khi sắp mưa","dr.rainTh":"Ngưỡng xác suất mưa","dr.sched":"Lịch tưới theo giờ","dr.add":"+ Thêm","seg.week":"7 ngày","ev.delay":"Hoãn","p.clearLog":"Xoá nhật ký","p.clearConfirm":"Xoá toàn bộ nhật ký sự kiện?",
         "dr.tg":"Cảnh báo Telegram: đặt biến môi trường TELEGRAM_BOT_TOKEN và TELEGRAM_CHAT_ID trên máy chủ để nhận cảnh báo nhiệt độ / khô hạn / mất kết nối.",
         "mq.label":"Chỉ số thuận lợi","mq.good":"Tốt","mq.watch":"Theo dõi","mq.cap":"Tỉ lệ mẫu nhiệt trong vùng thuận lợi",
         "stt.valve":"Trạng thái tưới","valve.open":"Đang mở","valve.closed":"Đóng","stt.timesToday":"lần hôm nay",
@@ -642,7 +642,7 @@
         "sec.params":"Target parameters","sec.tmin":"Temp low (°C)","sec.tmax":"Temp high (°C)","sec.moist":"Target moisture (%)","sec.note":"Note",
         "ov.title":"All-section overview","ov.sub":"Live parameters of all growing sections, side by side","ov.close":"Close","ov.total":"Sections","ov.temp":"Temperature (active)","ov.moist":"Moisture (active)","ov.fav":"Favorable index","ov.target":"Target","ov.note":"Note","ov.active":"Measuring","ov.nolive":"No sensor yet","ov.temp2":"Temp","ov.moist2":"Moist",
         "map.label":"Map","dr.darktint":"Dark background: Black ↔ Green",
-        "dr.smart":"Smart watering","dr.rain":"Delay watering when rain is coming","dr.rainTh":"Rain probability threshold","dr.sched":"Scheduled watering","dr.add":"+ Add","seg.week":"7 days","ev.delay":"Delay",
+        "dr.smart":"Smart watering","dr.rain":"Delay watering when rain is coming","dr.rainTh":"Rain probability threshold","dr.sched":"Scheduled watering","dr.add":"+ Add","seg.week":"7 days","ev.delay":"Delay","p.clearLog":"Clear log","p.clearConfirm":"Clear all event history?",
         "dr.tg":"Telegram alerts: set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID env vars on the server to receive heat / dry / disconnect alerts.",
         "mq.label":"Favorable index","mq.good":"Good","mq.watch":"Monitor","mq.cap":"Share of samples within the favorable range",
         "stt.valve":"Irrigation status","valve.open":"Open","valve.closed":"Closed","stt.timesToday":"today",
@@ -1118,6 +1118,8 @@
     /* ================= ACTIONS ================= */
     document.getElementById("logoutBtn").onclick=async()=>{ if(!confirm(t("logout.confirm"))) return; try{ await fetch("/api/logout",{method:"POST"}); }catch(e){} location.href="/login.html"; };
     document.getElementById("csvBtn").onclick=()=>{ window.location="/api/export.csv"; };
+    document.getElementById("clearLogBtn").onclick=async()=>{ if(!confirm(t("p.clearConfirm"))) return;
+      try{ await fetch("/api/events/clear",{method:"POST"}); await refresh(); }catch(e){} };
     // Tưới thủ công — bật/tắt van bất kỳ lúc nào, cập nhật ngay Van tưới + Lịch sử
     async function manualValve(action,btn){
       const old=btn.textContent; btn.disabled=true; btn.textContent=t("valve.sent");

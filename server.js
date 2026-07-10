@@ -225,6 +225,7 @@ let rainProbNow = null;          // xác suất mưa hiện tại (server tự l
 let rainSkipActive = false;      // đang hoãn tưới do mưa (tránh ghi log lặp)
 let lastAlertAt = {};            // chống spam cảnh báo Telegram
 let disconnectAlerted = false;   // đã báo mất kết nối ESP32 chưa
+let lastRxAt = null;             // lúc CUỐI thực sự nhận dữ liệu (trong phiên chạy hiện tại)
 let lastSchedFire = "";          // tránh kích hoạt lịch 2 lần trong cùng 1 phút
 
 function addEvent(type, detail, meta) {
@@ -311,8 +312,10 @@ function checkAlerts(temp, moisture) {
 // Watchdog: cảnh báo khi ESP32 ngừng gửi dữ liệu quá lâu
 const DISCONNECT_MS = 10 * 60 * 1000;
 function checkDisconnect() {
-  if (!latest.time) return;
-  const gap = Date.now() - new Date(latest.time).getTime();
+  // Chỉ cảnh báo nếu thiết bị ĐÃ gửi dữ liệu trong phiên này rồi mới ngưng
+  // → tránh báo giả khi server vừa khởi động / chưa cắm ESP32 / Render vừa ngủ dậy.
+  if (!lastRxAt) return;
+  const gap = Date.now() - lastRxAt;
   if (gap > DISCONNECT_MS && !disconnectAlerted) {
     disconnectAlerted = true;
     const mins = Math.round(gap / 60000);
@@ -374,6 +377,7 @@ app.get("/api/update", (req, res) => {
   history.push(latest);
   if (history.length > MAX_HISTORY) history.shift();
   dbInsertReading(temp, moisture, latest.time);
+  lastRxAt = Date.now();     // đánh dấu vừa nhận dữ liệu thật trong phiên này
   disconnectAlerted = false; // vừa có dữ liệu → xoá cờ mất kết nối
 
   totalCount++;
@@ -456,6 +460,13 @@ app.get("/api/history", requireAuth, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: "history error" });
   }
+});
+
+// ---- Xoá toàn bộ nhật ký sự kiện ----
+app.post("/api/events/clear", requireAuth, async (req, res) => {
+  events.length = 0;
+  if (USE_DB && pool) { try { await q("DELETE FROM sensor_events"); } catch (e) { console.error("clear events:", e.message); } }
+  res.json({ ok: true });
 });
 
 app.get("/api/config", requireAuth, (req, res) => res.json(config));
