@@ -40,10 +40,36 @@ const USE_DB = !!process.env.DATABASE_URL;
 let pool = null;
 let memUsers = []; // fallback: [{ user, name, hash }]
 
+// Chuẩn hoá tên đăng nhập để giảm lỗi khi người dùng gõ chữ hoa / dấu tiếng Việt / khoảng trắng.
+// "Tài Nguyễn" -> "tai_nguyen", "MEOCHIT" -> "meochit". Đăng nhập cũng dùng hàm này nên gõ có dấu vẫn vào được.
+function normUser(raw) {
+  return String(raw || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "") // bỏ dấu thanh + dấu mũ
+    .replace(/đ/g, "d").replace(/Đ/g, "d")  // đ / Đ -> d
+    .toLowerCase().trim()
+    .replace(/\s+/g, "_")            // khoảng trắng -> gạch dưới
+    .replace(/[^a-z0-9_]/g, "");     // bỏ mọi ký tự còn lại không hợp lệ
+}
+// Truy vấn DB có thử lại 1 lần khi Neon/Render đóng kết nối nhàn rỗi (giảm lỗi 500)
+async function q(sql, params) {
+  try { return await pool.query(sql, params); }
+  catch (e) {
+    if (/terminat|connection|ECONNRESET|timeout|socket|ended/i.test(e.message || "")) {
+      return await pool.query(sql, params); // thử lại 1 lần
+    }
+    throw e;
+  }
+}
+
 async function initAuth() {
   if (USE_DB) {
     const { Pool } = require("pg");
-    pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      max: 5, idleTimeoutMillis: 30000, connectionTimeoutMillis: 15000
+    });
+    pool.on("error", err => console.error("PG pool error:", err.message)); // không để lỗi kết nối làm sập server
     await pool.query(`CREATE TABLE IF NOT EXISTS users (
       id serial PRIMARY KEY,
       username text UNIQUE NOT NULL,
@@ -67,19 +93,19 @@ async function initAuth() {
 
 async function findUser(username) {
   if (USE_DB) {
-    const r = await pool.query("SELECT username,name,pass_hash FROM users WHERE username=$1", [username]);
+    const r = await q("SELECT username,name,pass_hash FROM users WHERE username=$1", [username]);
     return r.rows[0] ? { user: r.rows[0].username, name: r.rows[0].name, hash: r.rows[0].pass_hash } : null;
   }
   return memUsers.find(u => u.user === username) || null;
 }
 async function createUser(username, name, pass) {
   const hash = bcrypt.hashSync(pass, 10);
-  if (USE_DB) await pool.query("INSERT INTO users(username,name,pass_hash) VALUES($1,$2,$3)", [username, name, hash]);
+  if (USE_DB) await q("INSERT INTO users(username,name,pass_hash) VALUES($1,$2,$3)", [username, name, hash]);
   else memUsers.push({ user: username, name, hash });
 }
 async function updatePassword(username, newPass) {
   const hash = bcrypt.hashSync(newPass, 10);
-  if (USE_DB) await pool.query("UPDATE users SET pass_hash=$1 WHERE username=$2", [hash, username]);
+  if (USE_DB) await q("UPDATE users SET pass_hash=$1 WHERE username=$2", [hash, username]);
   else { const u = memUsers.find(x => x.user === username); if (u) u.hash = hash; }
 }
 
@@ -102,7 +128,7 @@ function startSession(res, user, name) {
 
 app.post("/api/login", async (req, res) => {
   try {
-    const user = String((req.body || {}).user || "").toLowerCase().trim();
+    const user = normUser((req.body || {}).user);
     const pass = (req.body || {}).pass || "";
     const found = await findUser(user);
     if (!found || !bcrypt.compareSync(pass, found.hash)) {
@@ -111,24 +137,28 @@ app.post("/api/login", async (req, res) => {
     startSession(res, found.user, found.name);
     res.json({ ok: true, name: found.name });
   } catch (e) {
-    res.status(500).json({ ok: false, error: "Lỗi máy chủ" });
+    console.error("Lỗi /api/login:", e.message); // hiện lý do thật trong Render Logs
+    res.status(500).json({ ok: false, error: "Máy chủ bận, thử lại sau vài giây" });
   }
 });
 
 app.post("/api/register", async (req, res) => {
   try {
-    const user = String((req.body || {}).user || "").toLowerCase().trim();
+    const user = normUser((req.body || {}).user); // tự bỏ dấu / chữ hoa / khoảng trắng
     const name = String((req.body || {}).name || "").trim();
     const pass = (req.body || {}).pass || "";
-    if (!/^[a-z0-9_]{3,20}$/.test(user)) return res.status(400).json({ ok: false, error: "Tài khoản 3–20 ký tự, chỉ chữ thường/số/gạch dưới" });
+    if (user.length < 3 || user.length > 20) {
+      return res.status(400).json({ ok: false, error: 'Tên đăng nhập (sau khi bỏ dấu) phải 3–20 ký tự chữ/số/gạch dưới. Gợi ý: dùng dạng không dấu như "tai_nguyen".' });
+    }
     if (!name) return res.status(400).json({ ok: false, error: "Vui lòng nhập tên hiển thị" });
     if (String(pass).length < 6) return res.status(400).json({ ok: false, error: "Mật khẩu tối thiểu 6 ký tự" });
-    if (await findUser(user)) return res.status(409).json({ ok: false, error: "Tài khoản đã tồn tại" });
+    if (await findUser(user)) return res.status(409).json({ ok: false, error: `Tài khoản "${user}" đã tồn tại, chọn tên khác` });
     await createUser(user, name, pass);
     startSession(res, user, name);
-    res.json({ ok: true, name });
+    res.json({ ok: true, name, user }); // trả về tên đăng nhập đã chuẩn hoá để client hiển thị
   } catch (e) {
-    res.status(500).json({ ok: false, error: "Lỗi máy chủ khi đăng ký" });
+    console.error("Lỗi /api/register:", e.message);
+    res.status(500).json({ ok: false, error: "Máy chủ bận khi đăng ký, thử lại sau vài giây" });
   }
 });
 
@@ -144,7 +174,8 @@ app.post("/api/change-password", requireAuth, async (req, res) => {
     await updatePassword(req.user.user, newPass);
     res.json({ ok: true });
   } catch (e) {
-    res.status(500).json({ ok: false, error: "Lỗi máy chủ" });
+    console.error("Lỗi /api/change-password:", e.message);
+    res.status(500).json({ ok: false, error: "Máy chủ bận, thử lại sau vài giây" });
   }
 });
 

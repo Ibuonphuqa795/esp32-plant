@@ -61,7 +61,7 @@
       <label for="name">Tên hiển thị</label>
       <input class="inp" id="name" placeholder="vd: Nguyễn Văn A" autofocus>
       <label for="user">Tài khoản</label>
-      <input class="inp" id="user" placeholder="chữ thường, số, gạch dưới (3–20 ký tự)" autocomplete="username">
+      <input class="inp" id="user" placeholder="vd: tai_nguyen (có dấu/chữ hoa sẽ tự chuyển)" autocomplete="username">
       <label for="pass">Mật khẩu</label>
       <input class="inp" id="pass" type="password" placeholder="tối thiểu 6 ký tự" autocomplete="new-password">
       <button class="btn" id="btn" type="submit">Đăng ký</button>
@@ -81,7 +81,7 @@
         const r=await fetch("/api/register",{method:"POST",headers:{"Content-Type":"application/json"},
           body:JSON.stringify({name:document.getElementById("name").value,user:document.getElementById("user").value,pass:document.getElementById("pass").value})});
         const j=await r.json();
-        if(j.ok){ msg.textContent="Tạo tài khoản thành công! Đang vào hệ thống…"; msg.className="msg ok show"; setTimeout(()=>window.location.href="/",800); }
+        if(j.ok){ msg.textContent="Tạo tài khoản thành công! Tên đăng nhập: "+(j.user||document.getElementById("user").value)+" — đang vào hệ thống…"; msg.className="msg ok show"; setTimeout(()=>window.location.href="/",1500); }
         else{ msg.textContent=j.error||"Đăng ký thất bại"; msg.className="msg err show"; btn.disabled=false; btn.textContent="Đăng ký"; }
       }catch(e){ msg.textContent="Không kết nối được server"; msg.className="msg err show"; btn.disabled=false; btn.textContent="Đăng ký"; }
     };
